@@ -338,7 +338,7 @@ impl UserRepo for InMemoryRepo {
             .cloned()
         {
             if existing.user_id != *user_id {
-                return Err(StoreError::conflict(format!(
+                return Err(StoreError::internal_conflict(format!(
                     "identity {provider}:{provider_user_id} belongs to another user"
                 )));
             }

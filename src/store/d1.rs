@@ -692,7 +692,7 @@ impl UserRepo for D1Repo {
     ) -> StoreResult<Identity> {
         if let Some(existing) = self.find_identity(provider, provider_user_id).await? {
             if existing.user_id != *user_id {
-                return Err(StoreError::conflict(format!(
+                return Err(StoreError::internal_conflict(format!(
                     "identity {provider}:{provider_user_id} belongs to another user"
                 )));
             }
