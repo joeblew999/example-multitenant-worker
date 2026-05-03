@@ -389,7 +389,7 @@ impl Repo for D1Repo {
     }
 
     async fn get_user_by_email(&self, email: &str) -> StoreResult<Option<User>> {
-        let lower = email.to_lowercase();
+        let lower = email.to_ascii_lowercase();
         let row: Option<UserRow> = self
             .query_one(
                 "SELECT id, email, email_verified, created_at_ms FROM users WHERE email_lower = ?",
@@ -514,7 +514,7 @@ impl Repo for D1Repo {
         let billing_id_str = billing_id.to_string();
         let org_id_str = org_id.to_string();
         let email = input.email.clone();
-        let email_lower = email.to_lowercase();
+        let email_lower = email.to_ascii_lowercase();
         let personal_name = personal_display_name(&email);
 
         let mut stmts: Vec<D1PreparedStatement> = Vec::new();
@@ -596,7 +596,7 @@ impl Repo for D1Repo {
         let billing_id_str = billing_id.to_string();
         let org_id_str = org_id.to_string();
         let email = input.email.clone();
-        let email_lower = email.to_lowercase();
+        let email_lower = email.to_ascii_lowercase();
         let personal_name = personal_display_name(&email);
         let provider = crate::domain::IdentityProvider::sso_str(&input.idp_id);
         let member_role = Role::Member.as_str();
@@ -814,7 +814,7 @@ impl Repo for D1Repo {
         billing_account_id: &BillingAccountId,
         domain: Option<String>,
     ) -> StoreResult<()> {
-        let lowered = domain.as_deref().map(str::to_lowercase);
+        let lowered = domain.as_deref().map(str::to_ascii_lowercase);
         let domain_arg = lowered.as_deref().map_or(D1Type::Null, D1Type::Text);
         self.execute_expecting_change(
             "UPDATE billing_accounts SET auto_join_domain = ? WHERE id = ? AND personal = 0",
@@ -828,7 +828,7 @@ impl Repo for D1Repo {
         &self,
         domain: &str,
     ) -> StoreResult<Option<BillingAccount>> {
-        let lowered = domain.to_lowercase();
+        let lowered = domain.to_ascii_lowercase();
         let row: Option<BillingAccountRow> = self
             .query_one(
                 "SELECT id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms \
@@ -1433,7 +1433,7 @@ impl Repo for D1Repo {
             .required_idp
             .as_deref()
             .map_or(D1Type::Null, D1Type::Text);
-        let email_lower = invitation.email.to_lowercase();
+        let email_lower = invitation.email.to_ascii_lowercase();
 
         let changes = self
             .insert_or_ignore(
@@ -1482,7 +1482,7 @@ impl Repo for D1Repo {
     }
 
     async fn list_pending_invitations_by_email(&self, email: &str) -> StoreResult<Vec<Invitation>> {
-        let lower = email.to_lowercase();
+        let lower = email.to_ascii_lowercase();
         let rows: Vec<InvitationRow> = self
             .query_all(
                 "SELECT id, scope_kind, scope_id, email, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms \
@@ -1499,7 +1499,7 @@ impl Repo for D1Repo {
         scope_id: &str,
         email: &str,
     ) -> StoreResult<Option<Invitation>> {
-        let lower = email.to_lowercase();
+        let lower = email.to_ascii_lowercase();
         let row: Option<InvitationRow> = self
             .query_one(
                 "SELECT id, scope_kind, scope_id, email, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms \

@@ -423,7 +423,7 @@ impl Repo for InMemoryRepo {
             .ok_or_else(|| {
                 StoreError::not_found(format!("billing account {billing_account_id}"))
             })?;
-        account.auto_join_domain = domain.map(|d| d.to_lowercase());
+        account.auto_join_domain = domain.map(|d| d.to_ascii_lowercase());
         Ok(())
     }
 
