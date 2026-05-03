@@ -17,7 +17,8 @@ use crate::auth::{
 };
 use crate::billing::BillingProvider;
 use crate::domain::{
-    AuthMethod, BillingAccountId, IdentityProvider, OrgId, Role, ScopeKind, SsoState, TokenPurpose,
+    AuthMethod, BillingAccountId, IdentityProvider, OrgId, Role, ScopeKind, ScopeTarget, SsoState,
+    TokenPurpose,
 };
 use crate::middleware::require_session;
 use crate::proto::workers::auth::v1::{
@@ -75,8 +76,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
                 validate_pending_invitation(&stored, &parsed.nonce)?;
                 Some(InvitationAcceptance {
                     invitation_id: parsed.invitation_id,
-                    scope_kind: parsed.scope_kind,
-                    scope_id: parsed.scope_id,
+                    target: ScopeTarget::from_parts(parsed.scope_kind, parsed.scope_id),
                     role: parsed.role,
                 })
             }

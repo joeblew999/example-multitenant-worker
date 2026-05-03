@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use crate::domain::{
     BillingAccount, BillingAccountId, BillingMembership, Identity, IdentityId, IdentityProvider,
     Invitation, InvitationId, InvitationStatus, OrgId, OrgMembership, Organization, Role,
-    ScopeKind, SsoConfig, SsoState, User, UserId, personal_display_name,
+    ScopeKind, ScopeTarget, SsoConfig, SsoState, User, UserId, personal_display_name,
 };
 
 use super::error::{StoreError, StoreResult};
@@ -1052,10 +1052,9 @@ fn apply_invitation_under_lock(
     acceptance: InvitationAcceptance,
     now_ms: i64,
 ) -> StoreResult<()> {
-    match acceptance.scope_kind {
-        ScopeKind::Billing => {
-            let billing_id = BillingAccountId::from_string(acceptance.scope_id);
-            if !g.billing_accounts.contains_key(&billing_id) {
+    match &acceptance.target {
+        ScopeTarget::Billing(billing_id) => {
+            if !g.billing_accounts.contains_key(billing_id) {
                 return Err(StoreError::not_found(format!(
                     "billing account {billing_id}"
                 )));
@@ -1064,22 +1063,21 @@ fn apply_invitation_under_lock(
                 (user_id.clone(), billing_id.clone()),
                 BillingMembership {
                     user_id: user_id.clone(),
-                    billing_account_id: billing_id,
+                    billing_account_id: billing_id.clone(),
                     role: acceptance.role,
                     created_at_ms: now_ms,
                 },
             );
         }
-        ScopeKind::Org => {
-            let org_id = OrgId::from_string(acceptance.scope_id);
-            if !g.organizations.contains_key(&org_id) {
+        ScopeTarget::Org(org_id) => {
+            if !g.organizations.contains_key(org_id) {
                 return Err(StoreError::not_found(format!("organization {org_id}")));
             }
             g.org_memberships.insert(
                 (user_id.clone(), org_id.clone()),
                 OrgMembership {
                     user_id: user_id.clone(),
-                    org_id,
+                    org_id: org_id.clone(),
                     role: acceptance.role,
                     created_at_ms: now_ms,
                 },

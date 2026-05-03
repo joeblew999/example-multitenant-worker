@@ -6,7 +6,8 @@ use uuid::Uuid;
 use crate::auth::verify_invitation;
 use crate::billing::BillingProvider;
 use crate::domain::{
-    BillingAccountId, Invitation, InvitationId, InvitationStatus, OrgId, ScopeKind, TokenPurpose,
+    BillingAccountId, Invitation, InvitationId, InvitationStatus, OrgId, ScopeKind, ScopeTarget,
+    TokenPurpose,
 };
 use crate::middleware::require_session;
 use crate::proto::workers::invitation::v1::{
@@ -160,8 +161,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
         }
         let acceptance = InvitationAcceptance {
             invitation_id: parsed.invitation_id.clone(),
-            scope_kind: parsed.scope_kind,
-            scope_id: parsed.scope_id.clone(),
+            target: ScopeTarget::from_parts(parsed.scope_kind, parsed.scope_id.clone()),
             role: parsed.role,
         };
         self.state

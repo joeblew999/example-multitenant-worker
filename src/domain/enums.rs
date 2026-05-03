@@ -157,6 +157,28 @@ impl fmt::Display for IdentityProvider {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScopeTarget {
+    Billing(super::ids::BillingAccountId),
+    Org(super::ids::OrgId),
+}
+
+impl ScopeTarget {
+    pub fn scope_id_str(&self) -> &str {
+        match self {
+            ScopeTarget::Billing(id) => id.as_str(),
+            ScopeTarget::Org(id) => id.as_str(),
+        }
+    }
+
+    pub fn from_parts(kind: ScopeKind, id: String) -> Self {
+        match kind {
+            ScopeKind::Billing => ScopeTarget::Billing(super::ids::BillingAccountId::from(id)),
+            ScopeKind::Org => ScopeTarget::Org(super::ids::OrgId::from(id)),
+        }
+    }
+}
+
 /// `purpose=` caveat values for the four kinds of macaroon this service
 /// mints. Verification rejects a token whose purpose doesn't match.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

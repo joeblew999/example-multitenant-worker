@@ -12,8 +12,8 @@ use std::future::Future;
 
 use crate::domain::{
     BillingAccount, BillingAccountId, BillingMembership, Identity, IdentityId, Invitation,
-    InvitationId, InvitationStatus, OrgId, OrgMembership, Organization, Role, ScopeKind, SsoConfig,
-    SsoState, User, UserId,
+    InvitationId, InvitationStatus, OrgId, OrgMembership, Organization, Role, ScopeKind,
+    ScopeTarget, SsoConfig, SsoState, User, UserId,
 };
 
 use super::error::StoreResult;
@@ -40,8 +40,7 @@ pub struct NewPasswordUser {
 #[derive(Clone, Debug)]
 pub struct InvitationAcceptance {
     pub invitation_id: InvitationId,
-    pub scope_kind: ScopeKind,
-    pub scope_id: String,
+    pub target: ScopeTarget,
     pub role: Role,
 }
 
