@@ -13,7 +13,6 @@ use connectrpc::{ConnectRpcBody, ConnectRpcService, Router as RpcRouter};
 use tower::{Layer, Service};
 use worker::{Context, Env, HttpRequest, event};
 
-#[allow(warnings, unused)]
 pub(crate) mod proto {
     include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
 }
