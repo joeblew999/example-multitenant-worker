@@ -30,10 +30,10 @@ fn healthz() -> Response<ConnectRpcBody> {
 
 fn oauth_callback(query: Option<&str>) -> Response<ConnectRpcBody> {
     let (mut code, mut state) = (None, None);
-    for (k, v) in query.map(parse_query).into_iter().flatten() {
-        match k {
-            "code" => code = Some(v),
-            "state" => state = Some(v),
+    for (k, v) in parse_query(query.unwrap_or_default()) {
+        match k.as_ref() {
+            "code" => code = Some(v.into_owned()),
+            "state" => state = Some(v.into_owned()),
             _ => {}
         }
     }
@@ -43,7 +43,7 @@ fn oauth_callback(query: Option<&str>) -> Response<ConnectRpcBody> {
             "missing `code` query parameter; pass through Auth.SsoComplete instead",
         );
     };
-    let state = state.unwrap_or("");
+    let state = state.unwrap_or_default();
     text(
         StatusCode::OK,
         format!(
@@ -64,8 +64,8 @@ fn verify_email_stub(_query: Option<&str>) -> Response<ConnectRpcBody> {
     )
 }
 
-fn parse_query(query: &str) -> impl Iterator<Item = (&str, &str)> {
-    query.split('&').filter_map(|pair| pair.split_once('='))
+fn parse_query(query: &str) -> url::form_urlencoded::Parse<'_> {
+    url::form_urlencoded::parse(query.as_bytes())
 }
 
 #[cfg(test)]

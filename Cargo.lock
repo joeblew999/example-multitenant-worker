@@ -1549,6 +1549,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tower",
+ "url",
  "uuid",
  "worker",
  "worker-macros",
