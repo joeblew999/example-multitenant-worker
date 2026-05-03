@@ -50,10 +50,10 @@ impl std::error::Error for StoreError {}
 impl From<StoreError> for ConnectError {
     fn from(err: StoreError) -> Self {
         match err {
-            StoreError::NotFound(s) => ConnectError::not_found(s),
-            StoreError::AlreadyExists(s) => ConnectError::already_exists(s),
+            StoreError::NotFound(_) => ConnectError::not_found("resource not found"),
+            StoreError::AlreadyExists(_) => ConnectError::already_exists("resource already exists"),
             StoreError::Conflict(s) => ConnectError::failed_precondition(s),
-            StoreError::Backend(s) => ConnectError::internal(s),
+            StoreError::Backend(_) => ConnectError::internal("internal error"),
         }
     }
 }

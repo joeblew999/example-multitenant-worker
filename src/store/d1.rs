@@ -1671,9 +1671,9 @@ fn classify_insert_error(context: &'static str, err: worker::Error) -> StoreErro
         || lower.contains("primary key constraint failed")
         || lower.contains("sqlite_constraint")
     {
-        StoreError::AlreadyExists(format!("{context}: {s}"))
+        StoreError::AlreadyExists(context.to_owned())
     } else {
-        StoreError::Backend(format!("{context}: {s}"))
+        StoreError::Backend(context.to_owned())
     }
 }
 

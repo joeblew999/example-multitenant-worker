@@ -4,32 +4,32 @@
 
 use std::future::Future;
 
+use crate::billing::error::{BillingError, BillingResult};
 use crate::domain::{BillingAccountId, Invoice, InvoiceId, Subscription};
-use crate::store::error::{StoreError, StoreResult};
 
 pub trait BillingProvider: Send + Sync + 'static {
     fn get_subscription(
         &self,
         billing_account_id: &BillingAccountId,
-    ) -> impl Future<Output = StoreResult<Subscription>> + Send;
+    ) -> impl Future<Output = BillingResult<Subscription>> + Send;
 
     fn set_payment_method(
         &self,
         billing_account_id: &BillingAccountId,
         payment_method_token: String,
         now_ms: i64,
-    ) -> impl Future<Output = StoreResult<Subscription>> + Send;
+    ) -> impl Future<Output = BillingResult<Subscription>> + Send;
 
     fn cancel_subscription(
         &self,
         billing_account_id: &BillingAccountId,
         now_ms: i64,
-    ) -> impl Future<Output = StoreResult<Subscription>> + Send;
+    ) -> impl Future<Output = BillingResult<Subscription>> + Send;
 
     fn list_invoices(
         &self,
         billing_account_id: &BillingAccountId,
-    ) -> impl Future<Output = StoreResult<Vec<Invoice>>> + Send;
+    ) -> impl Future<Output = BillingResult<Vec<Invoice>>> + Send;
 
     fn record_invoice(
         &self,
@@ -38,14 +38,13 @@ pub trait BillingProvider: Send + Sync + 'static {
         currency: String,
         status: String,
         now_ms: i64,
-    ) -> impl Future<Output = StoreResult<Invoice>> + Send;
+    ) -> impl Future<Output = BillingResult<Invoice>> + Send;
 
-    /// Idempotent: inserts a default-state subscription row if none exists.
     fn ensure_subscription(
         &self,
         billing_account_id: &BillingAccountId,
         now_ms: i64,
-    ) -> impl Future<Output = StoreResult<()>> + Send;
+    ) -> impl Future<Output = BillingResult<()>> + Send;
 }
 
 pub use native::InMemoryBillingProvider;
@@ -81,11 +80,11 @@ mod native {
         async fn get_subscription(
             &self,
             billing_account_id: &BillingAccountId,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             let g = self.subscriptions.lock().unwrap();
-            g.get(billing_account_id)
-                .cloned()
-                .ok_or_else(|| StoreError::not_found(format!("subscription {billing_account_id}")))
+            g.get(billing_account_id).cloned().ok_or_else(|| {
+                BillingError::not_found(format!("subscription {billing_account_id}"))
+            })
         }
 
         async fn set_payment_method(
@@ -93,7 +92,7 @@ mod native {
             billing_account_id: &BillingAccountId,
             payment_method_token: String,
             now_ms: i64,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             let sub = Subscription {
                 billing_account_id: billing_account_id.clone(),
                 plan: "starter".into(),
@@ -112,10 +111,10 @@ mod native {
             &self,
             billing_account_id: &BillingAccountId,
             now_ms: i64,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             let mut g = self.subscriptions.lock().unwrap();
             let sub = g.get_mut(billing_account_id).ok_or_else(|| {
-                StoreError::not_found(format!("subscription {billing_account_id}"))
+                BillingError::not_found(format!("subscription {billing_account_id}"))
             })?;
             sub.status = "canceled".into();
             sub.updated_at_ms = now_ms;
@@ -125,7 +124,7 @@ mod native {
         async fn list_invoices(
             &self,
             billing_account_id: &BillingAccountId,
-        ) -> StoreResult<Vec<Invoice>> {
+        ) -> BillingResult<Vec<Invoice>> {
             let g = self.invoices.lock().unwrap();
             Ok(g.get(billing_account_id).cloned().unwrap_or_default())
         }
@@ -137,7 +136,7 @@ mod native {
             currency: String,
             status: String,
             now_ms: i64,
-        ) -> StoreResult<Invoice> {
+        ) -> BillingResult<Invoice> {
             let inv = Invoice {
                 id: InvoiceId::new(),
                 billing_account_id: billing_account_id.clone(),
@@ -157,7 +156,7 @@ mod native {
             &self,
             billing_account_id: &BillingAccountId,
             now_ms: i64,
-        ) -> StoreResult<()> {
+        ) -> BillingResult<()> {
             let mut g = self.subscriptions.lock().unwrap();
             g.entry(billing_account_id.clone())
                 .or_insert_with(|| default_subscription(billing_account_id, now_ms));
@@ -186,8 +185,8 @@ mod wasm {
         }
     }
 
-    fn backend(s: impl Into<String>) -> StoreError {
-        StoreError::backend(s.into())
+    fn backend(s: impl Into<String>) -> BillingError {
+        BillingError::provider(s.into())
     }
     fn ms(x: i64) -> D1Type<'static> {
         D1Type::Real(x as f64)
@@ -239,7 +238,7 @@ mod wasm {
         async fn get_subscription(
             &self,
             billing_account_id: &BillingAccountId,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             let row: Option<SubRow> = self
                 .db
                 .prepare(
@@ -252,8 +251,9 @@ mod wasm {
                 .into_send()
                 .await
                 .map_err(|e| backend(format!("get_subscription: {e}")))?;
-            row.map(Into::into)
-                .ok_or_else(|| StoreError::not_found(format!("subscription {billing_account_id}")))
+            row.map(Into::into).ok_or_else(|| {
+                BillingError::not_found(format!("subscription {billing_account_id}"))
+            })
         }
 
         async fn set_payment_method(
@@ -261,7 +261,7 @@ mod wasm {
             billing_account_id: &BillingAccountId,
             payment_method_token: String,
             now_ms: i64,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             self.db
                 .prepare(
                     "INSERT INTO subscriptions (billing_account_id, plan, status, payment_method_token, updated_at_ms) \
@@ -294,7 +294,7 @@ mod wasm {
             &self,
             billing_account_id: &BillingAccountId,
             now_ms: i64,
-        ) -> StoreResult<Subscription> {
+        ) -> BillingResult<Subscription> {
             let result = self
                 .db
                 .prepare("UPDATE subscriptions SET status = 'canceled', updated_at_ms = ? WHERE billing_account_id = ?")
@@ -310,7 +310,7 @@ mod wasm {
                 .and_then(|m| m.changes)
                 .unwrap_or(0);
             if changes == 0 {
-                return Err(StoreError::not_found(format!(
+                return Err(BillingError::not_found(format!(
                     "subscription {billing_account_id}"
                 )));
             }
@@ -320,7 +320,7 @@ mod wasm {
         async fn list_invoices(
             &self,
             billing_account_id: &BillingAccountId,
-        ) -> StoreResult<Vec<Invoice>> {
+        ) -> BillingResult<Vec<Invoice>> {
             let rows: Vec<InvoiceRow> = self
                 .db
                 .prepare(
@@ -345,7 +345,7 @@ mod wasm {
             currency: String,
             status: String,
             now_ms: i64,
-        ) -> StoreResult<Invoice> {
+        ) -> BillingResult<Invoice> {
             let id = InvoiceId::new();
             let id_str = id.to_string();
             self.db
@@ -380,7 +380,7 @@ mod wasm {
             &self,
             billing_account_id: &BillingAccountId,
             now_ms: i64,
-        ) -> StoreResult<()> {
+        ) -> BillingResult<()> {
             self.db
                 .prepare(
                     "INSERT OR IGNORE INTO subscriptions (billing_account_id, plan, status, payment_method_token, updated_at_ms) \
