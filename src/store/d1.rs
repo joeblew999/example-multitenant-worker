@@ -20,8 +20,8 @@ use worker::{D1Database, D1PreparedStatement, D1Type};
 
 use crate::domain::{
     BillingAccount, BillingAccountId, BillingMembership, Identity, IdentityId, Invitation,
-    InvitationId, InvitationStatus, OrgId, OrgMembership, Organization, Role, ScopeKind, SsoConfig,
-    SsoState, User, UserId, personal_display_name,
+    InvitationId, InvitationStatus, OrgId, OrgMembership, Organization, Role, ScopeKind,
+    ScopeTarget, SsoConfig, SsoState, User, UserId, personal_display_name,
 };
 
 use super::error::{StoreError, StoreResult};
@@ -37,6 +37,84 @@ pub struct D1Repo {
 impl D1Repo {
     pub fn new(db: D1Database) -> Self {
         Self { db }
+    }
+
+    async fn query_one<T: for<'de> Deserialize<'de>>(
+        &self,
+        sql: &str,
+        binds: &[D1Type<'_>],
+    ) -> StoreResult<Option<T>> {
+        self.db
+            .prepare(sql)
+            .bind_refs(binds)
+            .map_err(|e| backend(format!("bind: {e}")))?
+            .first(None)
+            .into_send()
+            .await
+            .map_err(|e| backend(format!("query: {e}")))
+    }
+
+    async fn query_all<T: for<'de> Deserialize<'de>>(
+        &self,
+        sql: &str,
+        binds: &[D1Type<'_>],
+    ) -> StoreResult<Vec<T>> {
+        self.db
+            .prepare(sql)
+            .bind_refs(binds)
+            .map_err(|e| backend(format!("bind: {e}")))?
+            .all()
+            .into_send()
+            .await
+            .map_err(|e| backend(format!("query: {e}")))?
+            .results()
+            .map_err(|e| backend(format!("results: {e}")))
+    }
+
+    async fn execute(&self, sql: &str, binds: &[D1Type<'_>]) -> StoreResult<()> {
+        self.db
+            .prepare(sql)
+            .bind_refs(binds)
+            .map_err(|e| backend(format!("bind: {e}")))?
+            .run()
+            .into_send()
+            .await
+            .map_err(|e| backend(format!("execute: {e}")))?;
+        Ok(())
+    }
+
+    async fn execute_returning_changes(&self, sql: &str, binds: &[D1Type<'_>]) -> StoreResult<u64> {
+        let result = self
+            .db
+            .prepare(sql)
+            .bind_refs(binds)
+            .map_err(|e| backend(format!("bind: {e}")))?
+            .run()
+            .into_send()
+            .await
+            .map_err(|e| backend(format!("execute: {e}")))?;
+        let changes = result
+            .meta()
+            .map_err(|e| backend(format!("meta: {e}")))?
+            .and_then(|m| m.changes)
+            .unwrap_or(0);
+        Ok(changes as u64)
+    }
+
+    async fn execute_expecting_change(
+        &self,
+        sql: &str,
+        binds: &[D1Type<'_>],
+        not_found_msg: &str,
+    ) -> StoreResult<()> {
+        if self.execute_returning_changes(sql, binds).await? == 0 {
+            return Err(StoreError::not_found(not_found_msg));
+        }
+        Ok(())
+    }
+
+    async fn insert_or_ignore(&self, sql: &str, binds: &[D1Type<'_>]) -> StoreResult<u64> {
+        self.execute_returning_changes(sql, binds).await
     }
 }
 
@@ -299,79 +377,44 @@ fn placeholders(n: usize) -> String {
     std::iter::repeat_n("?", n).collect::<Vec<_>>().join(",")
 }
 
-// Result of `INSERT OR IGNORE` — number of rows inserted (0 means the
-// unique key was already present).
-async fn run_or_ignore_changes(stmt: D1PreparedStatement) -> StoreResult<u64> {
-    let result = stmt
-        .run()
-        .into_send()
-        .await
-        .map_err(|e| backend(format!("run: {e}")))?;
-    let changes = result
-        .meta()
-        .map_err(|e| backend(format!("meta: {e}")))?
-        .and_then(|m| m.changes)
-        .unwrap_or(0);
-    Ok(changes as u64)
-}
-
 impl Repo for D1Repo {
     async fn get_user(&self, id: &UserId) -> StoreResult<Option<User>> {
         let row: Option<UserRow> = self
-            .db
-            .prepare("SELECT id, email, email_verified, created_at_ms FROM users WHERE id = ?")
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_user: {e}")))?;
+            .query_one(
+                "SELECT id, email, email_verified, created_at_ms FROM users WHERE id = ?",
+                &[D1Type::Text(id.as_str())],
+            )
+            .await?;
         Ok(row.map(Into::into))
     }
 
     async fn get_user_by_email(&self, email: &str) -> StoreResult<Option<User>> {
         let lower = email.to_lowercase();
         let row: Option<UserRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, email, email_verified, created_at_ms FROM users WHERE email_lower = ?",
+                &[D1Type::Text(&lower)],
             )
-            .bind_refs(&[D1Type::Text(&lower)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_user_by_email: {e}")))?;
+            .await?;
         Ok(row.map(Into::into))
     }
 
     async fn mark_email_verified(&self, user_id: &UserId) -> StoreResult<()> {
-        self.db
-            .prepare("UPDATE users SET email_verified = 1 WHERE id = ?")
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("mark_email_verified: {e}")))?;
-        Ok(())
+        self.execute(
+            "UPDATE users SET email_verified = 1 WHERE id = ?",
+            &[D1Type::Text(user_id.as_str())],
+        )
+        .await
     }
 
     async fn list_identities(&self, user_id: &UserId) -> StoreResult<Vec<Identity>> {
         let rows: Vec<IdentityRow> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT id, user_id, provider, provider_user_id, secret, created_at_ms \
                  FROM identities WHERE user_id = ? ORDER BY created_at_ms",
+                &[D1Type::Text(user_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_identities: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("list_identities results: {e}")))?;
+            .await?;
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
@@ -381,17 +424,12 @@ impl Repo for D1Repo {
         provider_user_id: &str,
     ) -> StoreResult<Option<Identity>> {
         let row: Option<IdentityRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, user_id, provider, provider_user_id, secret, created_at_ms \
                  FROM identities WHERE provider = ? AND provider_user_id = ?",
+                &[D1Type::Text(provider), D1Type::Text(provider_user_id)],
             )
-            .bind_refs(&[D1Type::Text(provider), D1Type::Text(provider_user_id)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("find_identity: {e}")))?;
+            .await?;
         Ok(row.map(Into::into))
     }
 
@@ -406,22 +444,21 @@ impl Repo for D1Repo {
         let id = IdentityId::new();
         let id_str = id.to_string();
         let secret_arg = secret.as_deref().map_or(D1Type::Null, D1Type::Text);
-        let stmt = self
-            .db
-            .prepare(
+        let changes = self
+            .insert_or_ignore(
                 "INSERT OR IGNORE INTO identities (id, user_id, provider, provider_user_id, secret, created_at_ms) \
                  VALUES (?, ?, ?, ?, ?, ?)",
+                &[
+                    D1Type::Text(&id_str),
+                    D1Type::Text(user_id.as_str()),
+                    D1Type::Text(provider),
+                    D1Type::Text(provider_user_id),
+                    secret_arg,
+                    ms(now_ms),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(&id_str),
-                D1Type::Text(user_id.as_str()),
-                D1Type::Text(provider),
-                D1Type::Text(provider_user_id),
-                secret_arg,
-                ms(now_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?;
-        if run_or_ignore_changes(stmt).await? == 0 {
+            .await?;
+        if changes == 0 {
             return Err(StoreError::already_exists(format!(
                 "identity {provider}:{provider_user_id}"
             )));
@@ -441,51 +478,24 @@ impl Repo for D1Repo {
         identity_id: &IdentityId,
         new_secret: String,
     ) -> StoreResult<()> {
-        let result = self
-            .db
-            .prepare("UPDATE identities SET secret = ? WHERE id = ?")
-            .bind_refs(&[
+        self.execute_expecting_change(
+            "UPDATE identities SET secret = ? WHERE id = ?",
+            &[
                 D1Type::Text(&new_secret),
                 D1Type::Text(identity_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("update_identity_secret: {e}")))?;
-        let changes = result
-            .meta()
-            .map_err(|e| backend(format!("meta: {e}")))?
-            .and_then(|m| m.changes)
-            .unwrap_or(0);
-        if changes == 0 {
-            return Err(StoreError::not_found(format!("identity {identity_id}")));
-        }
-        Ok(())
+            ],
+            &format!("identity {identity_id}"),
+        )
+        .await
     }
 
     async fn delete_user(&self, user_id: &UserId) -> StoreResult<()> {
-        // Foreign-key cascades take care of identities, billing_memberships,
-        // org_memberships, and the personal billing account. Inviter is
-        // SET NULL via FK definition.
-        let result = self
-            .db
-            .prepare("DELETE FROM users WHERE id = ?")
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("delete_user: {e}")))?;
-        let changes = result
-            .meta()
-            .map_err(|e| backend(format!("meta: {e}")))?
-            .and_then(|m| m.changes)
-            .unwrap_or(0);
-        if changes == 0 {
-            return Err(StoreError::not_found(format!("user {user_id}")));
-        }
-        Ok(())
+        self.execute_expecting_change(
+            "DELETE FROM users WHERE id = ?",
+            &[D1Type::Text(user_id.as_str())],
+            &format!("user {user_id}"),
+        )
+        .await
     }
 
     async fn create_password_user(
@@ -506,7 +516,6 @@ impl Repo for D1Repo {
         let email = input.email.clone();
         let email_lower = email.to_lowercase();
         let personal_name = personal_display_name(&email);
-        let owner_role = Role::Owner.as_str();
 
         let mut stmts: Vec<D1PreparedStatement> = Vec::new();
         stmts.push(
@@ -539,75 +548,15 @@ impl Repo for D1Repo {
                 ])
                 .map_err(|e| backend(format!("bind identities: {e}")))?,
         );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO billing_accounts \
-                       (id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms) \
-                     VALUES (?, ?, 1, ?, NULL, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(&personal_name),
-                    D1Type::Text(&user_id_str),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind billing_accounts: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
-                     VALUES (?, ?, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&user_id_str),
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(owner_role),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind billing_memberships: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO subscriptions (billing_account_id, plan, status, payment_method_token, updated_at_ms) \
-                     VALUES (?, 'free', 'none', NULL, ?)",
-                )
-                .bind_refs(&[D1Type::Text(&billing_id_str), ms(now_ms)])
-                .map_err(|e| backend(format!("bind subscriptions: {e}")))?,
-        );
-
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO organizations \
-                       (id, display_name, billing_account_id, personal, owner_user_id, created_at_ms) \
-                     VALUES (?, ?, ?, 1, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&org_id_str),
-                    D1Type::Text(&personal_name),
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(&user_id_str),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind organizations: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO org_memberships (user_id, org_id, role, created_at_ms) \
-                     VALUES (?, ?, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&user_id_str),
-                    D1Type::Text(&org_id_str),
-                    D1Type::Text(owner_role),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind org_memberships: {e}")))?,
-        );
+        personal_account_stmts(
+            &self.db,
+            &mut stmts,
+            &user_id_str,
+            &billing_id_str,
+            &org_id_str,
+            &personal_name,
+            now_ms,
+        )?;
 
         let invite_payload = invite.as_ref().map(|i| invite_payload(i, now_ms));
         if let Some(payload) = &invite_payload {
@@ -650,7 +599,6 @@ impl Repo for D1Repo {
         let email_lower = email.to_lowercase();
         let personal_name = personal_display_name(&email);
         let provider = crate::domain::IdentityProvider::sso_str(&input.idp_id);
-        let owner_role = Role::Owner.as_str();
         let member_role = Role::Member.as_str();
         let auto_join_billing_str = auto_join_billing.as_ref().map(|b| b.to_string());
 
@@ -685,75 +633,15 @@ impl Repo for D1Repo {
                 ])
                 .map_err(|e| backend(format!("bind identities: {e}")))?,
         );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO billing_accounts \
-                       (id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms) \
-                     VALUES (?, ?, 1, ?, NULL, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(&personal_name),
-                    D1Type::Text(&user_id_str),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind billing_accounts: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
-                     VALUES (?, ?, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&user_id_str),
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(owner_role),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind billing_memberships: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO subscriptions (billing_account_id, plan, status, payment_method_token, updated_at_ms) \
-                     VALUES (?, 'free', 'none', NULL, ?)",
-                )
-                .bind_refs(&[D1Type::Text(&billing_id_str), ms(now_ms)])
-                .map_err(|e| backend(format!("bind subscriptions: {e}")))?,
-        );
-
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO organizations \
-                       (id, display_name, billing_account_id, personal, owner_user_id, created_at_ms) \
-                     VALUES (?, ?, ?, 1, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&org_id_str),
-                    D1Type::Text(&personal_name),
-                    D1Type::Text(&billing_id_str),
-                    D1Type::Text(&user_id_str),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind organizations: {e}")))?,
-        );
-        stmts.push(
-            self.db
-                .prepare(
-                    "INSERT INTO org_memberships (user_id, org_id, role, created_at_ms) \
-                     VALUES (?, ?, ?, ?)",
-                )
-                .bind_refs(&[
-                    D1Type::Text(&user_id_str),
-                    D1Type::Text(&org_id_str),
-                    D1Type::Text(owner_role),
-                    ms(now_ms),
-                ])
-                .map_err(|e| backend(format!("bind org_memberships: {e}")))?,
-        );
+        personal_account_stmts(
+            &self.db,
+            &mut stmts,
+            &user_id_str,
+            &billing_id_str,
+            &org_id_str,
+            &personal_name,
+            now_ms,
+        )?;
 
         if let Some(target) = &auto_join_billing_str {
             stmts.push(
@@ -818,17 +706,12 @@ impl Repo for D1Repo {
         id: &BillingAccountId,
     ) -> StoreResult<Option<BillingAccount>> {
         let row: Option<BillingAccountRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms \
                  FROM billing_accounts WHERE id = ?",
+                &[D1Type::Text(id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_billing_account: {e}")))?;
+            .await?;
         Ok(row.map(Into::into))
     }
 
@@ -837,23 +720,16 @@ impl Repo for D1Repo {
         user_id: &UserId,
     ) -> StoreResult<Vec<BillingAccountWithRole>> {
         let rows: Vec<BillingAccountRowWithRole> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT b.id, b.display_name, b.personal, b.owner_user_id, b.auto_join_domain, \
                         b.created_at_ms, m.role \
                  FROM billing_accounts b \
                  JOIN billing_memberships m ON m.billing_account_id = b.id \
                  WHERE m.user_id = ? \
                  ORDER BY b.id",
+                &[D1Type::Text(user_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_billing_accounts_for_user: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         rows.into_iter()
             .map(|r| {
                 let role = r
@@ -940,28 +816,12 @@ impl Repo for D1Repo {
     ) -> StoreResult<()> {
         let lowered = domain.as_deref().map(str::to_lowercase);
         let domain_arg = lowered.as_deref().map_or(D1Type::Null, D1Type::Text);
-        let result = self
-            .db
-            .prepare(
-                "UPDATE billing_accounts SET auto_join_domain = ? WHERE id = ? AND personal = 0",
-            )
-            .bind_refs(&[domain_arg, D1Type::Text(billing_account_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("set_auto_join_domain: {e}")))?;
-        let changes = result
-            .meta()
-            .map_err(|e| backend(format!("meta: {e}")))?
-            .and_then(|m| m.changes)
-            .unwrap_or(0);
-        if changes == 0 {
-            return Err(StoreError::not_found(format!(
-                "non-personal billing account {billing_account_id}"
-            )));
-        }
-        Ok(())
+        self.execute_expecting_change(
+            "UPDATE billing_accounts SET auto_join_domain = ? WHERE id = ? AND personal = 0",
+            &[domain_arg, D1Type::Text(billing_account_id.as_str())],
+            &format!("non-personal billing account {billing_account_id}"),
+        )
+        .await
     }
 
     async fn find_billing_by_auto_join_domain(
@@ -970,17 +830,12 @@ impl Repo for D1Repo {
     ) -> StoreResult<Option<BillingAccount>> {
         let lowered = domain.to_lowercase();
         let row: Option<BillingAccountRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms \
                  FROM billing_accounts WHERE personal = 0 AND auto_join_domain = ?",
+                &[D1Type::Text(&lowered)],
             )
-            .bind_refs(&[D1Type::Text(&lowered)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("find_billing_by_auto_join_domain: {e}")))?;
+            .await?;
         Ok(row.map(Into::into))
     }
 
@@ -997,17 +852,7 @@ impl Repo for D1Repo {
              FROM billing_accounts WHERE id IN ({placeholders})"
         );
         let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(*s)).collect();
-        let rows: Vec<BillingAccountRow> = self
-            .db
-            .prepare(&sql)
-            .bind_refs(&binds)
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_billing_accounts_by_ids: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+        let rows: Vec<BillingAccountRow> = self.query_all(&sql, &binds).await?;
         Ok(rows.into_iter().map(|r| (r.id.clone(), r.into())).collect())
     }
 
@@ -1027,15 +872,11 @@ impl Repo for D1Repo {
                 "cannot delete billing account: orgs still attached",
             ));
         }
-        self.db
-            .prepare("DELETE FROM billing_accounts WHERE id = ?")
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("delete_billing_account: {e}")))?;
-        Ok(())
+        self.execute(
+            "DELETE FROM billing_accounts WHERE id = ?",
+            &[D1Type::Text(id.as_str())],
+        )
+        .await
     }
 
     async fn count_orgs_for_billing(
@@ -1043,14 +884,11 @@ impl Repo for D1Repo {
         billing_account_id: &BillingAccountId,
     ) -> StoreResult<i64> {
         let row: Option<CountRow> = self
-            .db
-            .prepare("SELECT COUNT(*) AS n FROM organizations WHERE billing_account_id = ?")
-            .bind_refs(&[D1Type::Text(billing_account_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("count_orgs_for_billing: {e}")))?;
+            .query_one(
+                "SELECT COUNT(*) AS n FROM organizations WHERE billing_account_id = ?",
+                &[D1Type::Text(billing_account_id.as_str())],
+            )
+            .await?;
         Ok(row.map(|r| r.n).unwrap_or(0))
     }
 
@@ -1059,50 +897,35 @@ impl Repo for D1Repo {
         billing_account_id: &BillingAccountId,
     ) -> StoreResult<i64> {
         let row: Option<CountRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT COUNT(*) AS n FROM billing_memberships \
                  WHERE billing_account_id = ? AND role = 'owner'",
+                &[D1Type::Text(billing_account_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(billing_account_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("count_billing_owners: {e}")))?;
+            .await?;
         Ok(row.map(|r| r.n).unwrap_or(0))
     }
 
     async fn count_org_owners(&self, org_id: &OrgId) -> StoreResult<i64> {
         let row: Option<CountRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT COUNT(*) AS n FROM org_memberships \
                  WHERE org_id = ? AND role = 'owner'",
+                &[D1Type::Text(org_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(org_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("count_org_owners: {e}")))?;
+            .await?;
         Ok(row.map(|r| r.n).unwrap_or(0))
     }
 
     async fn count_non_personal_owner_memberships(&self, user_id: &UserId) -> StoreResult<i64> {
         let row: Option<CountRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT COUNT(*) AS n FROM billing_memberships m \
                  JOIN billing_accounts b ON b.id = m.billing_account_id \
                  WHERE m.user_id = ? AND m.role = 'owner' AND b.personal = 0",
+                &[D1Type::Text(user_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("count_non_personal_owner_memberships: {e}")))?;
+            .await?;
         Ok(row.map(|r| r.n).unwrap_or(0))
     }
 
@@ -1114,23 +937,18 @@ impl Repo for D1Repo {
     ) -> StoreResult<Organization> {
         let id = OrgId::new();
         let id_str = id.to_string();
-        self.db
-            .prepare(
-                "INSERT INTO organizations \
-                   (id, display_name, billing_account_id, personal, owner_user_id, created_at_ms) \
-                 VALUES (?, ?, ?, 0, NULL, ?)",
-            )
-            .bind_refs(&[
+        self.execute(
+            "INSERT INTO organizations \
+               (id, display_name, billing_account_id, personal, owner_user_id, created_at_ms) \
+             VALUES (?, ?, ?, 0, NULL, ?)",
+            &[
                 D1Type::Text(&id_str),
                 D1Type::Text(&display_name),
                 D1Type::Text(billing_account_id.as_str()),
                 ms(now_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("create_organization: {e}")))?;
+            ],
+        )
+        .await?;
         Ok(Organization {
             id,
             display_name,
@@ -1143,17 +961,12 @@ impl Repo for D1Repo {
 
     async fn get_organization(&self, id: &OrgId) -> StoreResult<Option<Organization>> {
         let row: Option<OrgRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, display_name, billing_account_id, personal, owner_user_id, created_at_ms \
                  FROM organizations WHERE id = ?",
+                &[D1Type::Text(id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_organization: {e}")))?;
+            .await?;
         Ok(row.map(Into::into))
     }
 
@@ -1162,41 +975,27 @@ impl Repo for D1Repo {
         billing_account_id: &BillingAccountId,
     ) -> StoreResult<Vec<Organization>> {
         let rows: Vec<OrgRow> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT id, display_name, billing_account_id, personal, owner_user_id, created_at_ms \
                  FROM organizations WHERE billing_account_id = ? ORDER BY id",
+                &[D1Type::Text(billing_account_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(billing_account_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_organizations_for_billing: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
     async fn list_organizations_for_user(&self, user_id: &UserId) -> StoreResult<Vec<OrgWithRole>> {
         let rows: Vec<OrgRowWithRole> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT o.id, o.display_name, o.billing_account_id, o.personal, o.owner_user_id, \
                         o.created_at_ms, m.role \
                  FROM organizations o \
                  JOIN org_memberships m ON m.org_id = o.id \
                  WHERE m.user_id = ? \
                  ORDER BY o.id",
+                &[D1Type::Text(user_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(user_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_organizations_for_user: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         rows.into_iter()
             .map(|r| {
                 let role = r
@@ -1231,17 +1030,7 @@ impl Repo for D1Repo {
              FROM organizations WHERE id IN ({placeholders})"
         );
         let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(*s)).collect();
-        let rows: Vec<OrgRow> = self
-            .db
-            .prepare(&sql)
-            .bind_refs(&binds)
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_organizations_by_ids: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+        let rows: Vec<OrgRow> = self.query_all(&sql, &binds).await?;
         Ok(rows.into_iter().map(|r| (r.id.clone(), r.into())).collect())
     }
 
@@ -1255,15 +1044,11 @@ impl Repo for D1Repo {
                 "personal organizations are deleted with the user",
             ));
         }
-        self.db
-            .prepare("DELETE FROM organizations WHERE id = ?")
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("delete_organization: {e}")))?;
-        Ok(())
+        self.execute(
+            "DELETE FROM organizations WHERE id = ?",
+            &[D1Type::Text(id.as_str())],
+        )
+        .await
     }
 
     async fn add_billing_membership(
@@ -1273,20 +1058,19 @@ impl Repo for D1Repo {
         role: Role,
         now_ms: i64,
     ) -> StoreResult<()> {
-        let stmt = self
-            .db
-            .prepare(
+        let changes = self
+            .insert_or_ignore(
                 "INSERT OR IGNORE INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
                  VALUES (?, ?, ?, ?)",
+                &[
+                    D1Type::Text(user_id.as_str()),
+                    D1Type::Text(billing_account_id.as_str()),
+                    D1Type::Text(role.as_str()),
+                    ms(now_ms),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(user_id.as_str()),
-                D1Type::Text(billing_account_id.as_str()),
-                D1Type::Text(role.as_str()),
-                ms(now_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?;
-        if run_or_ignore_changes(stmt).await? == 0 {
+            .await?;
+        if changes == 0 {
             return Err(StoreError::already_exists(format!(
                 "billing membership {user_id} -> {billing_account_id}"
             )));
@@ -1300,20 +1084,15 @@ impl Repo for D1Repo {
         billing_account_id: &BillingAccountId,
     ) -> StoreResult<Option<BillingMembership>> {
         let row: Option<BillingMembershipRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT user_id, billing_account_id, role, created_at_ms \
                  FROM billing_memberships WHERE user_id = ? AND billing_account_id = ?",
+                &[
+                    D1Type::Text(user_id.as_str()),
+                    D1Type::Text(billing_account_id.as_str()),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(user_id.as_str()),
-                D1Type::Text(billing_account_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_billing_membership: {e}")))?;
+            .await?;
         match row {
             Some(r) => Ok(Some(r.try_into()?)),
             None => Ok(None),
@@ -1338,21 +1117,15 @@ impl Repo for D1Repo {
                 ));
             }
         }
-        self.db
-            .prepare(
-                "UPDATE billing_memberships SET role = ? WHERE user_id = ? AND billing_account_id = ?",
-            )
-            .bind_refs(&[
+        self.execute(
+            "UPDATE billing_memberships SET role = ? WHERE user_id = ? AND billing_account_id = ?",
+            &[
                 D1Type::Text(role.as_str()),
                 D1Type::Text(user_id.as_str()),
                 D1Type::Text(billing_account_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("update_billing_membership_role: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn remove_billing_membership(
@@ -1372,18 +1145,14 @@ impl Repo for D1Repo {
                 ));
             }
         }
-        self.db
-            .prepare("DELETE FROM billing_memberships WHERE user_id = ? AND billing_account_id = ?")
-            .bind_refs(&[
+        self.execute(
+            "DELETE FROM billing_memberships WHERE user_id = ? AND billing_account_id = ?",
+            &[
                 D1Type::Text(user_id.as_str()),
                 D1Type::Text(billing_account_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("remove_billing_membership: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn list_billing_memberships(
@@ -1401,23 +1170,16 @@ impl Repo for D1Repo {
             user_created_at_ms: i64,
         }
         let rows: Vec<Row> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT m.user_id, m.billing_account_id, m.role, m.created_at_ms AS membership_created_at_ms, \
                         u.email, u.email_verified, u.created_at_ms AS user_created_at_ms \
                  FROM billing_memberships m \
                  JOIN users u ON u.id = m.user_id \
                  WHERE m.billing_account_id = ? \
                  ORDER BY m.user_id",
+                &[D1Type::Text(billing_account_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(billing_account_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_billing_memberships: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         rows.into_iter()
             .map(|r| {
                 let role = r
@@ -1449,20 +1211,19 @@ impl Repo for D1Repo {
         role: Role,
         now_ms: i64,
     ) -> StoreResult<()> {
-        let stmt = self
-            .db
-            .prepare(
+        let changes = self
+            .insert_or_ignore(
                 "INSERT OR IGNORE INTO org_memberships (user_id, org_id, role, created_at_ms) \
                  VALUES (?, ?, ?, ?)",
+                &[
+                    D1Type::Text(user_id.as_str()),
+                    D1Type::Text(org_id.as_str()),
+                    D1Type::Text(role.as_str()),
+                    ms(now_ms),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(user_id.as_str()),
-                D1Type::Text(org_id.as_str()),
-                D1Type::Text(role.as_str()),
-                ms(now_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?;
-        if run_or_ignore_changes(stmt).await? == 0 {
+            .await?;
+        if changes == 0 {
             return Err(StoreError::already_exists(format!(
                 "org membership {user_id} -> {org_id}"
             )));
@@ -1476,20 +1237,15 @@ impl Repo for D1Repo {
         org_id: &OrgId,
     ) -> StoreResult<Option<OrgMembership>> {
         let row: Option<OrgMembershipRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT user_id, org_id, role, created_at_ms FROM org_memberships \
                  WHERE user_id = ? AND org_id = ?",
+                &[
+                    D1Type::Text(user_id.as_str()),
+                    D1Type::Text(org_id.as_str()),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(user_id.as_str()),
-                D1Type::Text(org_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_org_membership: {e}")))?;
+            .await?;
         match row {
             Some(r) => Ok(Some(r.try_into()?)),
             None => Ok(None),
@@ -1513,19 +1269,15 @@ impl Repo for D1Repo {
                 ));
             }
         }
-        self.db
-            .prepare("UPDATE org_memberships SET role = ? WHERE user_id = ? AND org_id = ?")
-            .bind_refs(&[
+        self.execute(
+            "UPDATE org_memberships SET role = ? WHERE user_id = ? AND org_id = ?",
+            &[
                 D1Type::Text(role.as_str()),
                 D1Type::Text(user_id.as_str()),
                 D1Type::Text(org_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("update_org_membership_role: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn remove_org_membership(&self, user_id: &UserId, org_id: &OrgId) -> StoreResult<()> {
@@ -1540,18 +1292,14 @@ impl Repo for D1Repo {
                 ));
             }
         }
-        self.db
-            .prepare("DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?")
-            .bind_refs(&[
+        self.execute(
+            "DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?",
+            &[
                 D1Type::Text(user_id.as_str()),
                 D1Type::Text(org_id.as_str()),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("remove_org_membership: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn list_org_memberships(&self, org_id: &OrgId) -> StoreResult<Vec<OrgMemberRow>> {
@@ -1566,23 +1314,16 @@ impl Repo for D1Repo {
             user_created_at_ms: i64,
         }
         let rows: Vec<Row> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT m.user_id, m.org_id, m.role, m.created_at_ms AS membership_created_at_ms, \
                         u.email, u.email_verified, u.created_at_ms AS user_created_at_ms \
                  FROM org_memberships m \
                  JOIN users u ON u.id = m.user_id \
                  WHERE m.org_id = ? \
                  ORDER BY m.user_id",
+                &[D1Type::Text(org_id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(org_id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_org_memberships: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         rows.into_iter()
             .map(|r| {
                 let role = r
@@ -1623,17 +1364,7 @@ impl Repo for D1Repo {
         let mut binds: Vec<D1Type<'_>> = Vec::with_capacity(scope_ids.len() + 1);
         binds.push(D1Type::Text(scope_kind.as_str()));
         binds.extend(scope_ids.iter().map(|s| D1Type::Text(*s)));
-        let rows: Vec<SsoConfigRow> = self
-            .db
-            .prepare(&sql)
-            .bind_refs(&binds)
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_sso_configs_by_scope_ids: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+        let rows: Vec<SsoConfigRow> = self.query_all(&sql, &binds).await?;
         rows.into_iter()
             .map(|r| {
                 let scope_id = r.scope_id.clone();
@@ -1649,17 +1380,12 @@ impl Repo for D1Repo {
         scope_id: &str,
     ) -> StoreResult<Option<SsoConfig>> {
         let row: Option<SsoConfigRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT scope_kind, scope_id, idp_id, kind, login_url, break_glass_user_id, required, updated_at_ms \
                  FROM sso_configs WHERE scope_kind = ? AND scope_id = ?",
+                &[D1Type::Text(scope_kind.as_str()), D1Type::Text(scope_id)],
             )
-            .bind_refs(&[D1Type::Text(scope_kind.as_str()), D1Type::Text(scope_id)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_sso_config: {e}")))?;
+            .await?;
         match row {
             Some(r) => Ok(Some(r.try_into()?)),
             None => Ok(None),
@@ -1668,19 +1394,17 @@ impl Repo for D1Repo {
 
     async fn upsert_sso_config(&self, config: SsoConfig) -> StoreResult<()> {
         let required: i64 = if config.required { 1 } else { 0 };
-        self.db
-            .prepare(
-                "INSERT INTO sso_configs (scope_kind, scope_id, idp_id, kind, login_url, break_glass_user_id, required, updated_at_ms) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
-                 ON CONFLICT(scope_kind, scope_id) DO UPDATE SET \
-                   idp_id = excluded.idp_id, \
-                   kind = excluded.kind, \
-                   login_url = excluded.login_url, \
-                   break_glass_user_id = excluded.break_glass_user_id, \
-                   required = excluded.required, \
-                   updated_at_ms = excluded.updated_at_ms",
-            )
-            .bind_refs(&[
+        self.execute(
+            "INSERT INTO sso_configs (scope_kind, scope_id, idp_id, kind, login_url, break_glass_user_id, required, updated_at_ms) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(scope_kind, scope_id) DO UPDATE SET \
+               idp_id = excluded.idp_id, \
+               kind = excluded.kind, \
+               login_url = excluded.login_url, \
+               break_glass_user_id = excluded.break_glass_user_id, \
+               required = excluded.required, \
+               updated_at_ms = excluded.updated_at_ms",
+            &[
                 D1Type::Text(config.scope_kind.as_str()),
                 D1Type::Text(&config.scope_id),
                 D1Type::Text(&config.idp_id),
@@ -1689,25 +1413,17 @@ impl Repo for D1Repo {
                 D1Type::Text(config.break_glass_user_id.as_str()),
                 D1Type::Integer(required as i32),
                 ms(config.updated_at_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("upsert_sso_config: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn delete_sso_config(&self, scope_kind: ScopeKind, scope_id: &str) -> StoreResult<()> {
-        self.db
-            .prepare("DELETE FROM sso_configs WHERE scope_kind = ? AND scope_id = ?")
-            .bind_refs(&[D1Type::Text(scope_kind.as_str()), D1Type::Text(scope_id)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("delete_sso_config: {e}")))?;
-        Ok(())
+        self.execute(
+            "DELETE FROM sso_configs WHERE scope_kind = ? AND scope_id = ?",
+            &[D1Type::Text(scope_kind.as_str()), D1Type::Text(scope_id)],
+        )
+        .await
     }
 
     async fn create_invitation(&self, invitation: Invitation) -> StoreResult<()> {
@@ -1719,29 +1435,28 @@ impl Repo for D1Repo {
             .map_or(D1Type::Null, D1Type::Text);
         let email_lower = invitation.email.to_lowercase();
 
-        let stmt = self
-            .db
-            .prepare(
+        let changes = self
+            .insert_or_ignore(
                 "INSERT OR IGNORE INTO invitations \
                    (id, scope_kind, scope_id, email, email_lower, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms) \
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                &[
+                    D1Type::Text(invitation.id.as_str()),
+                    D1Type::Text(invitation.scope_kind.as_str()),
+                    D1Type::Text(&invitation.scope_id),
+                    D1Type::Text(&invitation.email),
+                    D1Type::Text(&email_lower),
+                    D1Type::Text(invitation.role.as_str()),
+                    inviter_arg,
+                    required_idp_arg,
+                    D1Type::Text(&invitation.nonce),
+                    ms(invitation.expires_at_ms),
+                    D1Type::Text(invitation.status.as_str()),
+                    ms(invitation.created_at_ms),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(invitation.id.as_str()),
-                D1Type::Text(invitation.scope_kind.as_str()),
-                D1Type::Text(&invitation.scope_id),
-                D1Type::Text(&invitation.email),
-                D1Type::Text(&email_lower),
-                D1Type::Text(invitation.role.as_str()),
-                inviter_arg,
-                required_idp_arg,
-                D1Type::Text(&invitation.nonce),
-                ms(invitation.expires_at_ms),
-                D1Type::Text(invitation.status.as_str()),
-                ms(invitation.created_at_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?;
-        if run_or_ignore_changes(stmt).await? == 0 {
+            .await?;
+        if changes == 0 {
             return Err(StoreError::already_exists(format!(
                 "pending invite for {} on {}:{}",
                 invitation.email,
@@ -1754,17 +1469,12 @@ impl Repo for D1Repo {
 
     async fn get_invitation(&self, id: &InvitationId) -> StoreResult<Option<Invitation>> {
         let row: Option<InvitationRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, scope_kind, scope_id, email, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms \
                  FROM invitations WHERE id = ?",
+                &[D1Type::Text(id.as_str())],
             )
-            .bind_refs(&[D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("get_invitation: {e}")))?;
+            .await?;
         match row {
             Some(r) => Ok(Some(r.try_into()?)),
             None => Ok(None),
@@ -1774,19 +1484,12 @@ impl Repo for D1Repo {
     async fn list_pending_invitations_by_email(&self, email: &str) -> StoreResult<Vec<Invitation>> {
         let lower = email.to_lowercase();
         let rows: Vec<InvitationRow> = self
-            .db
-            .prepare(
+            .query_all(
                 "SELECT id, scope_kind, scope_id, email, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms \
                  FROM invitations WHERE email_lower = ? AND status = 'pending' ORDER BY created_at_ms",
+                &[D1Type::Text(&lower)],
             )
-            .bind_refs(&[D1Type::Text(&lower)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .all()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_pending_invitations_by_email: {e}")))?
-            .results()
-            .map_err(|e| backend(format!("results: {e}")))?;
+            .await?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
@@ -1798,21 +1501,16 @@ impl Repo for D1Repo {
     ) -> StoreResult<Option<Invitation>> {
         let lower = email.to_lowercase();
         let row: Option<InvitationRow> = self
-            .db
-            .prepare(
+            .query_one(
                 "SELECT id, scope_kind, scope_id, email, role, inviter_user_id, required_idp, nonce, expires_at_ms, status, created_at_ms \
                  FROM invitations WHERE scope_kind = ? AND scope_id = ? AND email_lower = ? AND status = 'pending'",
+                &[
+                    D1Type::Text(scope_kind.as_str()),
+                    D1Type::Text(scope_id),
+                    D1Type::Text(&lower),
+                ],
             )
-            .bind_refs(&[
-                D1Type::Text(scope_kind.as_str()),
-                D1Type::Text(scope_id),
-                D1Type::Text(&lower),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("list_pending_invitation_by_scope_email: {e}")))?;
+            .await?;
         match row {
             Some(r) => Ok(Some(r.try_into()?)),
             None => Ok(None),
@@ -1824,15 +1522,11 @@ impl Repo for D1Repo {
         id: &InvitationId,
         status: InvitationStatus,
     ) -> StoreResult<()> {
-        self.db
-            .prepare("UPDATE invitations SET status = ? WHERE id = ?")
-            .bind_refs(&[D1Type::Text(status.as_str()), D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("update_invitation_status: {e}")))?;
-        Ok(())
+        self.execute(
+            "UPDATE invitations SET status = ? WHERE id = ?",
+            &[D1Type::Text(status.as_str()), D1Type::Text(id.as_str())],
+        )
+        .await
     }
 
     async fn refresh_invitation_token(
@@ -1841,17 +1535,15 @@ impl Repo for D1Repo {
         new_nonce: String,
         new_expiry_ms: i64,
     ) -> StoreResult<()> {
-        self.db
-            .prepare(
-                "UPDATE invitations SET nonce = ?, expires_at_ms = ?, status = 'pending' WHERE id = ?",
-            )
-            .bind_refs(&[D1Type::Text(&new_nonce), ms(new_expiry_ms), D1Type::Text(id.as_str())])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("refresh_invitation_token: {e}")))?;
-        Ok(())
+        self.execute(
+            "UPDATE invitations SET nonce = ?, expires_at_ms = ?, status = 'pending' WHERE id = ?",
+            &[
+                D1Type::Text(&new_nonce),
+                ms(new_expiry_ms),
+                D1Type::Text(id.as_str()),
+            ],
+        )
+        .await
     }
 
     async fn accept_invitation_existing_user(
@@ -1875,8 +1567,8 @@ impl Repo for D1Repo {
                 .bind_refs(&[D1Type::Text(nonce), ms(now_ms)])
                 .map_err(|e| backend(format!("bind nonce: {e}")))?,
         );
-        match acceptance.scope_kind {
-            ScopeKind::Billing => stmts.push(
+        match &acceptance.target {
+            ScopeTarget::Billing(billing_id) => stmts.push(
                 self.db
                     .prepare(
                         "INSERT INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
@@ -1884,13 +1576,13 @@ impl Repo for D1Repo {
                     )
                     .bind_refs(&[
                         D1Type::Text(&user_id_str),
-                        D1Type::Text(&acceptance.scope_id),
+                        D1Type::Text(billing_id.as_str()),
                         D1Type::Text(acceptance.role.as_str()),
                         ms(now_ms),
                     ])
                     .map_err(|e| backend(format!("bind billing membership: {e}")))?,
             ),
-            ScopeKind::Org => stmts.push(
+            ScopeTarget::Org(org_id) => stmts.push(
                 self.db
                     .prepare(
                         "INSERT INTO org_memberships (user_id, org_id, role, created_at_ms) \
@@ -1898,7 +1590,7 @@ impl Repo for D1Repo {
                     )
                     .bind_refs(&[
                         D1Type::Text(&user_id_str),
-                        D1Type::Text(&acceptance.scope_id),
+                        D1Type::Text(org_id.as_str()),
                         D1Type::Text(acceptance.role.as_str()),
                         ms(now_ms),
                     ])
@@ -1921,14 +1613,12 @@ impl Repo for D1Repo {
     }
 
     async fn consume_nonce(&self, nonce: &str, purpose: &str, now_ms: i64) -> StoreResult<()> {
-        let stmt = self
-            .db
-            .prepare(
+        let changes = self
+            .insert_or_ignore(
                 "INSERT OR IGNORE INTO consumed_nonces (nonce, purpose, consumed_at_ms) VALUES (?, ?, ?)",
+                &[D1Type::Text(nonce), D1Type::Text(purpose), ms(now_ms)],
             )
-            .bind_refs(&[D1Type::Text(nonce), D1Type::Text(purpose), ms(now_ms)])
-            .map_err(|e| backend(format!("bind: {e}")))?;
-        let changes = run_or_ignore_changes(stmt).await?;
+            .await?;
         if changes == 0 {
             return Err(StoreError::already_exists(format!("nonce {nonce}")));
         }
@@ -1940,49 +1630,29 @@ impl Repo for D1Repo {
             .expected_idp
             .as_deref()
             .map_or(D1Type::Null, D1Type::Text);
-        self.db
-            .prepare(
-                "INSERT INTO sso_states (state, scope_hint, expected_idp, created_at_ms, expires_at_ms) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind_refs(&[
+        self.execute(
+            "INSERT INTO sso_states (state, scope_hint, expected_idp, created_at_ms, expires_at_ms) \
+             VALUES (?, ?, ?, ?, ?)",
+            &[
                 D1Type::Text(&state.state),
                 D1Type::Text(&state.scope_hint),
                 expected_idp_arg,
                 ms(state.created_at_ms),
                 ms(state.expires_at_ms),
-            ])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("store_sso_state: {e}")))?;
-        Ok(())
+            ],
+        )
+        .await
     }
 
     async fn consume_sso_state(&self, state: &str, now_ms: i64) -> StoreResult<Option<SsoState>> {
         let row: Option<SsoStateRow> = self
-            .db
-            .prepare(
-                "SELECT state, scope_hint, expected_idp, created_at_ms, expires_at_ms \
-                 FROM sso_states WHERE state = ?",
+            .query_one(
+                "DELETE FROM sso_states WHERE state = ? \
+                 RETURNING state, scope_hint, expected_idp, created_at_ms, expires_at_ms",
+                &[D1Type::Text(state)],
             )
-            .bind_refs(&[D1Type::Text(state)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .first(None)
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("consume_sso_state get: {e}")))?;
+            .await?;
         let Some(row) = row else { return Ok(None) };
-        // Delete unconditionally so a stale entry can't linger.
-        self.db
-            .prepare("DELETE FROM sso_states WHERE state = ?")
-            .bind_refs(&[D1Type::Text(state)])
-            .map_err(|e| backend(format!("bind: {e}")))?
-            .run()
-            .into_send()
-            .await
-            .map_err(|e| backend(format!("consume_sso_state delete: {e}")))?;
         if row.expires_at_ms < now_ms {
             return Ok(None);
         }
@@ -2007,14 +1677,92 @@ fn classify_insert_error(context: &'static str, err: worker::Error) -> StoreErro
     }
 }
 
+/// Builds the personal billing account + subscription + personal org +
+/// owner memberships that every new user gets. Shared between the
+/// password and SSO signup paths.
+fn personal_account_stmts(
+    db: &D1Database,
+    stmts: &mut Vec<D1PreparedStatement>,
+    user_id_str: &str,
+    billing_id_str: &str,
+    org_id_str: &str,
+    personal_name: &str,
+    now_ms: i64,
+) -> StoreResult<()> {
+    let owner_role = Role::Owner.as_str();
+    stmts.push(
+        db.prepare(
+            "INSERT INTO billing_accounts \
+               (id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms) \
+             VALUES (?, ?, 1, ?, NULL, ?)",
+        )
+        .bind_refs(&[
+            D1Type::Text(billing_id_str),
+            D1Type::Text(personal_name),
+            D1Type::Text(user_id_str),
+            ms(now_ms),
+        ])
+        .map_err(|e| backend(format!("bind billing_accounts: {e}")))?,
+    );
+    stmts.push(
+        db.prepare(
+            "INSERT INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind_refs(&[
+            D1Type::Text(user_id_str),
+            D1Type::Text(billing_id_str),
+            D1Type::Text(owner_role),
+            ms(now_ms),
+        ])
+        .map_err(|e| backend(format!("bind billing_memberships: {e}")))?,
+    );
+    stmts.push(
+        db.prepare(
+            "INSERT INTO subscriptions (billing_account_id, plan, status, payment_method_token, updated_at_ms) \
+             VALUES (?, 'free', 'none', NULL, ?)",
+        )
+        .bind_refs(&[D1Type::Text(billing_id_str), ms(now_ms)])
+        .map_err(|e| backend(format!("bind subscriptions: {e}")))?,
+    );
+    stmts.push(
+        db.prepare(
+            "INSERT INTO organizations \
+               (id, display_name, billing_account_id, personal, owner_user_id, created_at_ms) \
+             VALUES (?, ?, ?, 1, ?, ?)",
+        )
+        .bind_refs(&[
+            D1Type::Text(org_id_str),
+            D1Type::Text(personal_name),
+            D1Type::Text(billing_id_str),
+            D1Type::Text(user_id_str),
+            ms(now_ms),
+        ])
+        .map_err(|e| backend(format!("bind organizations: {e}")))?,
+    );
+    stmts.push(
+        db.prepare(
+            "INSERT INTO org_memberships (user_id, org_id, role, created_at_ms) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind_refs(&[
+            D1Type::Text(user_id_str),
+            D1Type::Text(org_id_str),
+            D1Type::Text(owner_role),
+            ms(now_ms),
+        ])
+        .map_err(|e| backend(format!("bind org_memberships: {e}")))?,
+    );
+    Ok(())
+}
+
 /// Holds the bound strings needed to assemble the invitation-acceptance
 /// statements, separated so the borrow checker can see they outlive the
 /// statement vector that references them.
 struct InvitePayload {
     user_invitation_id: String,
-    scope_id: String,
     role: &'static str,
-    scope_kind: ScopeKind,
+    target: ScopeTarget,
     nonce: String,
     now_ms: i64,
 }
@@ -2022,9 +1770,8 @@ struct InvitePayload {
 fn invite_payload(invite: &InvitationAcceptance, now_ms: i64) -> InvitePayload {
     InvitePayload {
         user_invitation_id: invite.invitation_id.to_string(),
-        scope_id: invite.scope_id.clone(),
         role: invite.role.as_str(),
-        scope_kind: invite.scope_kind,
+        target: invite.target.clone(),
         nonce: format!("invite-accept:{}", invite.invitation_id),
         now_ms,
     }
@@ -2044,28 +1791,28 @@ impl InvitePayload {
             .bind_refs(&[D1Type::Text(&self.nonce), ms(self.now_ms)])
             .map_err(|e| backend(format!("bind nonce: {e}")))?,
         );
-        match self.scope_kind {
-            ScopeKind::Billing => out.push(
+        match &self.target {
+            ScopeTarget::Billing(billing_id) => out.push(
                 db.prepare(
                     "INSERT INTO billing_memberships (user_id, billing_account_id, role, created_at_ms) \
                      VALUES (?, ?, ?, ?)",
                 )
                 .bind_refs(&[
                     D1Type::Text(user_id_str),
-                    D1Type::Text(&self.scope_id),
+                    D1Type::Text(billing_id.as_str()),
                     D1Type::Text(self.role),
                     ms(self.now_ms),
                 ])
                 .map_err(|e| backend(format!("bind invite billing: {e}")))?,
             ),
-            ScopeKind::Org => out.push(
+            ScopeTarget::Org(org_id) => out.push(
                 db.prepare(
                     "INSERT INTO org_memberships (user_id, org_id, role, created_at_ms) \
                      VALUES (?, ?, ?, ?)",
                 )
                 .bind_refs(&[
                     D1Type::Text(user_id_str),
-                    D1Type::Text(&self.scope_id),
+                    D1Type::Text(org_id.as_str()),
                     D1Type::Text(self.role),
                     ms(self.now_ms),
                 ])
