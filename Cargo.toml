@@ -1,0 +1,65 @@
+[package]
+name = "workers-multitenant"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+authors = ["Connor Hindley <conn.hindley@gmail.com>"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+worker = { version = "0.8", features = ["http", "d1"] }
+worker-macros = { version = "0.8", features = ["http"] }
+
+# connectrpc = { version = "0.3", default-features = false }
+connectrpc = { git = "https://github.com/anthropics/connect-rust", rev = "d0bee62d4a3f7316d092f9b3920fa694928c60ee", default-features = false }
+
+# Protobuf runtime used by generated code.
+buffa = { version = "0.4", features = ["json"] }
+buffa-types = { version = "0.4", features = ["json"] }
+
+# Macaroons for every auth artifact (sessions + one-shot tokens).
+libmacaroon = { version = "0.2", features = ["wasm"], default-features = false }
+
+# Argon2id password hashing — pure Rust, builds for wasm32.
+argon2 = { version = "0.5", default-features = false, features = ["alloc", "password-hash"] }
+password-hash = { version = "0.5", default-features = false, features = ["alloc", "rand_core"] }
+# `OsRng` lives in rand_core under its `getrandom` feature; enable it
+# directly so the salt generation path resolves on both wasm32 and native.
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+
+# UUIDs (v4 for ids and nonces). `js` feature wires getrandom to crypto.getRandomValues
+# on wasm32 so the rest of the crate doesn't have to.
+uuid = { version = "1", features = ["v4", "serde", "js"] }
+
+base64 = "0.22"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+bytes = { version = "1.5", features = ["serde"] }
+
+futures = "0.3"
+tower = { version = "0.5", features = ["util"] }
+
+# `getrandom/js` is also needed for any non-libmacaroon dep that pulls in
+# OS RNG on wasm32 (uuid via `js`, password-hash for salts). We surface it
+# explicitly so a `cargo build --target wasm32-unknown-unknown` from the
+# library root works without depending on transitive feature unification.
+getrandom = { version = "0.2", features = ["js"] }
+
+[build-dependencies]
+# connectrpc-build = { version = "0.3" }
+connectrpc-build = { git = "https://github.com/anthropics/connect-rust", rev = "d0bee62d4a3f7316d092f9b3920fa694928c60ee" }
+
+[dev-dependencies]
+futures = "0.3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1

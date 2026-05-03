@@ -1,0 +1,6 @@
+[target.wasm32-unknown-unknown]
+# `reference-types` keeps the externref table alive through aggressive
+# size-optimization passes. Without it `opt-level = "z"` drops the table
+# and `wasm-bindgen` fails with "externref table required for catch
+# wrappers" when worker-build is invoked with `--panic-unwind`.
+rustflags = ["-C", "target-feature=+reference-types"]
