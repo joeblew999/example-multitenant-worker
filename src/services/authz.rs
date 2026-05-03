@@ -4,9 +4,9 @@ use crate::auth::SessionContext;
 use crate::billing::BillingProvider;
 use crate::domain::{BillingAccountId, OrgId, Organization, Role, ScopeKind, SsoConfig};
 use crate::state::SharedState;
-use crate::store::Repo;
+use crate::store::{MembershipRepo, SsoConfigRepo};
 
-pub async fn require_billing_member<R: Repo, B: BillingProvider>(
+pub async fn require_billing_member<R: MembershipRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     session: &SessionContext,
     billing_id: &BillingAccountId,
@@ -19,7 +19,7 @@ pub async fn require_billing_member<R: Repo, B: BillingProvider>(
     Ok(mem.role)
 }
 
-pub async fn require_billing_owner<R: Repo, B: BillingProvider>(
+pub async fn require_billing_owner<R: MembershipRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     session: &SessionContext,
     billing_id: &BillingAccountId,
@@ -32,7 +32,7 @@ pub async fn require_billing_owner<R: Repo, B: BillingProvider>(
     Ok(())
 }
 
-pub async fn require_org_or_billing_owner<R: Repo, B: BillingProvider>(
+pub async fn require_org_or_billing_owner<R: MembershipRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     session: &SessionContext,
     org: &Organization,
@@ -58,7 +58,7 @@ pub async fn require_org_or_billing_owner<R: Repo, B: BillingProvider>(
     ))
 }
 
-pub async fn resolve_required_sso<R: Repo, B: BillingProvider>(
+pub async fn resolve_required_sso<R: SsoConfigRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     billing: &BillingAccountId,
     org: Option<&OrgId>,

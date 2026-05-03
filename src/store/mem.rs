@@ -12,8 +12,9 @@ use crate::domain::{
 
 use super::error::{StoreError, StoreResult};
 use super::repo::{
-    BillingAccountWithRole, BillingMemberRow, InvitationAcceptance, NewPasswordUser, NewSsoUser,
-    OrgMemberRow, OrgWithRole, Repo,
+    AuthFlowRepo, BillingAccountWithRole, BillingMemberRow, BillingRepo, InvitationAcceptance,
+    InvitationRepo, MembershipRepo, NewPasswordUser, NewSsoUser, OrgMemberRow, OrgRepo,
+    OrgWithRole, SsoConfigRepo, UserRepo,
 };
 
 #[derive(Default)]
@@ -41,7 +42,7 @@ impl InMemoryRepo {
     }
 }
 
-impl Repo for InMemoryRepo {
+impl UserRepo for InMemoryRepo {
     async fn get_user(&self, id: &UserId) -> StoreResult<Option<User>> {
         let g = self.inner.lock().unwrap();
         Ok(g.users.get(id).cloned())
@@ -355,7 +356,9 @@ impl Repo for InMemoryRepo {
         g.identities.insert(id, identity.clone());
         Ok(identity)
     }
+}
 
+impl BillingRepo for InMemoryRepo {
     async fn get_billing_account(
         &self,
         id: &BillingAccountId,
@@ -509,29 +512,9 @@ impl Repo for InMemoryRepo {
             .filter(|m| m.billing_account_id == *billing_account_id && m.role == Role::Owner)
             .count() as i64)
     }
+}
 
-    async fn count_org_owners(&self, org_id: &OrgId) -> StoreResult<i64> {
-        let g = self.inner.lock().unwrap();
-        Ok(g.org_memberships
-            .values()
-            .filter(|m| m.org_id == *org_id && m.role == Role::Owner)
-            .count() as i64)
-    }
-
-    async fn count_non_personal_owner_memberships(&self, user_id: &UserId) -> StoreResult<i64> {
-        let g = self.inner.lock().unwrap();
-        Ok(g.billing_memberships
-            .values()
-            .filter(|m| m.user_id == *user_id && m.role == Role::Owner)
-            .filter(|m| {
-                g.billing_accounts
-                    .get(&m.billing_account_id)
-                    .map(|b| !b.personal)
-                    .unwrap_or(false)
-            })
-            .count() as i64)
-    }
-
+impl OrgRepo for InMemoryRepo {
     async fn create_organization(
         &self,
         display_name: String,
@@ -625,7 +608,9 @@ impl Repo for InMemoryRepo {
             })
             .collect())
     }
+}
 
+impl MembershipRepo for InMemoryRepo {
     async fn add_billing_membership(
         &self,
         user_id: &UserId,
@@ -841,6 +826,30 @@ impl Repo for InMemoryRepo {
         Ok(out)
     }
 
+    async fn count_org_owners(&self, org_id: &OrgId) -> StoreResult<i64> {
+        let g = self.inner.lock().unwrap();
+        Ok(g.org_memberships
+            .values()
+            .filter(|m| m.org_id == *org_id && m.role == Role::Owner)
+            .count() as i64)
+    }
+
+    async fn count_non_personal_owner_memberships(&self, user_id: &UserId) -> StoreResult<i64> {
+        let g = self.inner.lock().unwrap();
+        Ok(g.billing_memberships
+            .values()
+            .filter(|m| m.user_id == *user_id && m.role == Role::Owner)
+            .filter(|m| {
+                g.billing_accounts
+                    .get(&m.billing_account_id)
+                    .map(|b| !b.personal)
+                    .unwrap_or(false)
+            })
+            .count() as i64)
+    }
+}
+
+impl SsoConfigRepo for InMemoryRepo {
     async fn get_sso_config(
         &self,
         scope_kind: ScopeKind,
@@ -883,7 +892,9 @@ impl Repo for InMemoryRepo {
         g.sso_configs.remove(&(scope_kind, scope_id.to_owned()));
         Ok(())
     }
+}
 
+impl InvitationRepo for InMemoryRepo {
     async fn create_invitation(&self, invitation: Invitation) -> StoreResult<()> {
         let mut g = self.inner.lock().unwrap();
         // Re-inviting the same address must go through refresh_invitation_token
@@ -987,7 +998,9 @@ impl Repo for InMemoryRepo {
         apply_invitation_under_lock(&mut g, user_id, acceptance, now_ms)?;
         Ok(())
     }
+}
 
+impl AuthFlowRepo for InMemoryRepo {
     async fn consume_nonce(&self, nonce: &str, purpose: &str, now_ms: i64) -> StoreResult<()> {
         let mut g = self.inner.lock().unwrap();
         if g.consumed_nonces.contains_key(nonce) {

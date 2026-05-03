@@ -4,7 +4,7 @@ use crate::auth::{PasswordError, TokenError};
 use crate::billing::BillingProvider;
 use crate::domain::{Identity, IdentityProvider, Role, ScopeKind, User, UserId};
 use crate::state::SharedState;
-use crate::store::{Repo, StoreError};
+use crate::store::{StoreError, UserRepo};
 
 pub fn map_token_error(e: TokenError) -> ConnectError {
     match e {
@@ -98,7 +98,7 @@ pub fn validate_email(email: &str) -> Result<(), ConnectError> {
     Ok(())
 }
 
-pub async fn fetch_user<R: Repo, B: BillingProvider>(
+pub async fn fetch_user<R: UserRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     user_id: &UserId,
 ) -> Result<User, ConnectError> {
@@ -109,7 +109,7 @@ pub async fn fetch_user<R: Repo, B: BillingProvider>(
         .ok_or_else(|| ConnectError::unauthenticated("session user no longer exists"))
 }
 
-pub async fn fetch_password_identity<R: Repo, B: BillingProvider>(
+pub async fn fetch_password_identity<R: UserRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     user_id: &UserId,
     not_found: impl FnOnce() -> ConnectError,

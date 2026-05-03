@@ -26,8 +26,9 @@ use crate::domain::{
 
 use super::error::{StoreError, StoreResult};
 use super::repo::{
-    BillingAccountWithRole, BillingMemberRow, InvitationAcceptance, NewPasswordUser, NewSsoUser,
-    OrgMemberRow, OrgWithRole, Repo,
+    AuthFlowRepo, BillingAccountWithRole, BillingMemberRow, BillingRepo, InvitationAcceptance,
+    InvitationRepo, MembershipRepo, NewPasswordUser, NewSsoUser, OrgMemberRow, OrgRepo,
+    OrgWithRole, SsoConfigRepo, UserRepo,
 };
 
 pub struct D1Repo {
@@ -377,7 +378,7 @@ fn placeholders(n: usize) -> String {
     std::iter::repeat_n("?", n).collect::<Vec<_>>().join(",")
 }
 
-impl Repo for D1Repo {
+impl UserRepo for D1Repo {
     async fn get_user(&self, id: &UserId) -> StoreResult<Option<User>> {
         let row: Option<UserRow> = self
             .query_one(
@@ -700,7 +701,9 @@ impl Repo for D1Repo {
         self.add_identity(user_id, provider, provider_user_id, secret, now_ms)
             .await
     }
+}
 
+impl BillingRepo for D1Repo {
     async fn get_billing_account(
         &self,
         id: &BillingAccountId,
@@ -905,30 +908,9 @@ impl Repo for D1Repo {
             .await?;
         Ok(row.map(|r| r.n).unwrap_or(0))
     }
+}
 
-    async fn count_org_owners(&self, org_id: &OrgId) -> StoreResult<i64> {
-        let row: Option<CountRow> = self
-            .query_one(
-                "SELECT COUNT(*) AS n FROM org_memberships \
-                 WHERE org_id = ? AND role = 'owner'",
-                &[D1Type::Text(org_id.as_str())],
-            )
-            .await?;
-        Ok(row.map(|r| r.n).unwrap_or(0))
-    }
-
-    async fn count_non_personal_owner_memberships(&self, user_id: &UserId) -> StoreResult<i64> {
-        let row: Option<CountRow> = self
-            .query_one(
-                "SELECT COUNT(*) AS n FROM billing_memberships m \
-                 JOIN billing_accounts b ON b.id = m.billing_account_id \
-                 WHERE m.user_id = ? AND m.role = 'owner' AND b.personal = 0",
-                &[D1Type::Text(user_id.as_str())],
-            )
-            .await?;
-        Ok(row.map(|r| r.n).unwrap_or(0))
-    }
-
+impl OrgRepo for D1Repo {
     async fn create_organization(
         &self,
         display_name: String,
@@ -1050,7 +1032,9 @@ impl Repo for D1Repo {
         )
         .await
     }
+}
 
+impl MembershipRepo for D1Repo {
     async fn add_billing_membership(
         &self,
         user_id: &UserId,
@@ -1348,6 +1332,31 @@ impl Repo for D1Repo {
             .collect()
     }
 
+    async fn count_org_owners(&self, org_id: &OrgId) -> StoreResult<i64> {
+        let row: Option<CountRow> = self
+            .query_one(
+                "SELECT COUNT(*) AS n FROM org_memberships \
+                 WHERE org_id = ? AND role = 'owner'",
+                &[D1Type::Text(org_id.as_str())],
+            )
+            .await?;
+        Ok(row.map(|r| r.n).unwrap_or(0))
+    }
+
+    async fn count_non_personal_owner_memberships(&self, user_id: &UserId) -> StoreResult<i64> {
+        let row: Option<CountRow> = self
+            .query_one(
+                "SELECT COUNT(*) AS n FROM billing_memberships m \
+                 JOIN billing_accounts b ON b.id = m.billing_account_id \
+                 WHERE m.user_id = ? AND m.role = 'owner' AND b.personal = 0",
+                &[D1Type::Text(user_id.as_str())],
+            )
+            .await?;
+        Ok(row.map(|r| r.n).unwrap_or(0))
+    }
+}
+
+impl SsoConfigRepo for D1Repo {
     async fn list_sso_configs_by_scope_ids(
         &self,
         scope_kind: ScopeKind,
@@ -1425,7 +1434,9 @@ impl Repo for D1Repo {
         )
         .await
     }
+}
 
+impl InvitationRepo for D1Repo {
     async fn create_invitation(&self, invitation: Invitation) -> StoreResult<()> {
         let inviter = invitation.inviter_user_id.as_ref().map(|u| u.to_string());
         let inviter_arg = inviter.as_deref().map_or(D1Type::Null, D1Type::Text);
@@ -1611,7 +1622,9 @@ impl Repo for D1Repo {
             .map_err(|e| classify_insert_error("accept_invitation_existing_user", e))?;
         Ok(())
     }
+}
 
+impl AuthFlowRepo for D1Repo {
     async fn consume_nonce(&self, nonce: &str, purpose: &str, now_ms: i64) -> StoreResult<()> {
         let changes = self
             .insert_or_ignore(

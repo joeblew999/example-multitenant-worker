@@ -5,8 +5,6 @@
 use std::sync::Arc;
 
 use crate::auth::Keyring;
-use crate::billing::BillingProvider;
-use crate::store::Repo;
 use crate::time::SharedClock;
 
 /// Tunables sourced from environment vars (or defaults).
@@ -33,7 +31,7 @@ impl Default for Config {
     }
 }
 
-pub struct AppState<R: Repo, B: BillingProvider> {
+pub struct AppState<R, B> {
     pub repo: R,
     pub billing: B,
     pub keyring: Arc<Keyring>,

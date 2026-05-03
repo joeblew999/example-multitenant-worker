@@ -5,12 +5,12 @@ use crate::billing::BillingProvider;
 use crate::domain::{AuthMethod, BillingAccount, Organization, Role, User, UserId};
 use crate::proto::workers::auth::v1::WhoamiInfo;
 use crate::state::SharedState;
-use crate::store::{BillingAccountWithRole, OrgWithRole, Repo};
+use crate::store::{BillingAccountWithRole, BillingRepo, OrgRepo, OrgWithRole};
 
 use super::common::map_token_error;
 use super::convert::build_whoami;
 
-pub async fn fetch_membership_lists<R: Repo, B: BillingProvider>(
+pub async fn fetch_membership_lists<R: BillingRepo + OrgRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     user_id: &UserId,
 ) -> Result<(Vec<BillingAccountWithRole>, Vec<OrgWithRole>), ConnectError> {
@@ -21,7 +21,7 @@ pub async fn fetch_membership_lists<R: Repo, B: BillingProvider>(
     Ok((billings, orgs))
 }
 
-pub async fn build_whoami_async<R: Repo, B: BillingProvider>(
+pub async fn build_whoami_async<R: BillingRepo + OrgRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     user: &User,
     billing: &BillingAccount,
@@ -51,7 +51,7 @@ pub fn find_personal_billing(
         .ok_or_else(|| ConnectError::internal("personal billing missing"))
 }
 
-pub async fn issue_personal_session<R: Repo, B: BillingProvider>(
+pub async fn issue_personal_session<R: BillingRepo + OrgRepo, B: BillingProvider>(
     state: &SharedState<R, B>,
     user: &User,
     auth_method: AuthMethod,

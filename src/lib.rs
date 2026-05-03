@@ -172,7 +172,7 @@ mod tests {
     use crate::proto::workers::org::v1::{CreateOrganizationRequest, OrgService};
     use crate::services::{AuthServer, BillingServer, OrgServer};
     use crate::state::{AppState, Config, SharedState};
-    use crate::store::{InMemoryRepo, Repo};
+    use crate::store::{BillingRepo, InMemoryRepo, MembershipRepo};
     use crate::time::{SharedClock, SystemClock};
 
     type TestRepo = InMemoryRepo;

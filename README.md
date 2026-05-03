@@ -16,7 +16,9 @@ fetch (event handler)
   └─ AuthLayer                 ← optional: verifies session macaroon, inserts SessionContext
       └─ ConnectRpcService     ← parses path, dispatches by service+method
             └─ Router          ← AuthService, BillingService, OrgService, InvitationService
-                └─ Repo + BillingProvider (D1 in production, in-memory in tests)
+                └─ Repo (supertrait of UserRepo, BillingRepo, OrgRepo, MembershipRepo,
+                │        SsoConfigRepo, InvitationRepo, AuthFlowRepo)
+                └─ BillingProvider (D1 in production, in-memory in tests)
 ```
 
 Four ConnectRPC services under `proto/workers/`:
@@ -67,8 +69,10 @@ src/routes.rs                                             # /healthz, /oauth/cal
 src/auth/{keyring, tokens, password, session}.rs          # macaroon mint/verify, Argon2id
 src/billing/provider.rs                                   # BillingProvider trait + impls
 src/domain/{ids, enums, entities}.rs                      # typed IDs, role/scope enums, structs
-src/store/{repo, mem, d1, error}.rs                       # Repo trait + InMemory + D1 impls
-src/services/{auth, billing, org, invitation, common}.rs  # service handlers
+src/store/repo/{mod, user, billing, org, membership, …}.rs # sub-traits + Repo supertrait
+src/store/{mem, d1, error}.rs                              # InMemory + D1 impls, StoreError
+src/services/{auth, billing, org, invitation}.rs          # service handlers
+src/services/{authz, session, common, convert}.rs         # shared helpers
 src/{state, time}.rs                                      # AppState + Config; Clock trait
 migrations/0001_init.sql                                  # full schema
 wrangler.toml                                             # binding + env config
@@ -94,6 +98,24 @@ just delete and recreate.
 **Membership** lives in two tables (`billing_memberships`,
 `org_memberships`). They're orthogonal -- billing account ownership does
 not grant implicit org access.
+
+## Store traits
+
+The `Repo` supertrait composes seven focused sub-traits, one per
+aggregate boundary. Implementations (`D1Repo`, `InMemoryRepo`) implement
+each sub-trait independently; the blanket impl auto-derives `Repo` for
+any type satisfying all seven. Helper functions bind on only the
+sub-traits they need.
+
+| Trait            | Methods | Scope                                          |
+| ---------------- | ------- | ---------------------------------------------- |
+| `UserRepo`       | 11      | User/identity CRUD + atomic signup paths       |
+| `BillingRepo`    | 9       | Billing account CRUD and counts                |
+| `OrgRepo`        | 6       | Organization CRUD                              |
+| `MembershipRepo` | 12      | Billing + org membership ops and owner counts  |
+| `SsoConfigRepo`  | 4       | SSO configuration per scope                    |
+| `InvitationRepo` | 7       | Invitation lifecycle                           |
+| `AuthFlowRepo`   | 3       | Nonces + SSO state (ephemeral auth-flow tokens)|
 
 ## SSO precedence
 
