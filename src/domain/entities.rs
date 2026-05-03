@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use super::enums::{Role, ScopeKind};
+use super::enums::{Role, ScopeKind, ScopeTarget};
 use super::ids::{BillingAccountId, IdentityId, InvitationId, InvoiceId, OrgId, UserId};
 
 pub fn personal_display_name(email: &str) -> String {
@@ -118,12 +118,10 @@ impl FromStr for InvitationStatus {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invitation {
     pub id: InvitationId,
-    pub scope_kind: ScopeKind,
-    /// `BillingAccountId` or `OrgId` as a string.
-    pub scope_id: String,
+    pub scope: ScopeTarget,
     pub email: String,
     pub role: Role,
     pub inviter_user_id: Option<UserId>,

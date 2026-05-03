@@ -6,8 +6,7 @@ use uuid::Uuid;
 use crate::auth::verify_invitation;
 use crate::billing::BillingProvider;
 use crate::domain::{
-    BillingAccountId, Invitation, InvitationId, InvitationStatus, OrgId, ScopeKind, ScopeTarget,
-    TokenPurpose,
+    Invitation, InvitationId, InvitationStatus, ScopeKind, ScopeTarget, TokenPurpose,
 };
 use crate::middleware::require_session;
 use crate::proto::workers::invitation::v1::{
@@ -37,15 +36,13 @@ impl<R: Repo, B: BillingProvider> InvitationServer<R, B> {
     }
 
     async fn scope_display_name(&self, invitation: &Invitation) -> Result<String, ConnectError> {
-        match invitation.scope_kind {
-            ScopeKind::Billing => {
-                let id = BillingAccountId::from(invitation.scope_id.as_str());
-                let acct = self.state.repo.get_billing_account(&id).await?;
+        match &invitation.scope {
+            ScopeTarget::Billing(id) => {
+                let acct = self.state.repo.get_billing_account(id).await?;
                 Ok(acct.map(|a| a.display_name).unwrap_or_default())
             }
-            ScopeKind::Org => {
-                let id = OrgId::from(invitation.scope_id.as_str());
-                let org = self.state.repo.get_organization(&id).await?;
+            ScopeTarget::Org(id) => {
+                let org = self.state.repo.get_organization(id).await?;
                 Ok(org.map(|o| o.display_name).unwrap_or_default())
             }
         }
@@ -82,11 +79,13 @@ fn invitation_status_to_pb(s: InvitationStatus) -> buffa::EnumValue<InvitationSt
 }
 
 fn invitation_to_pb_with_display(inv: Invitation, scope_display_name: String) -> InvitationPb {
+    let scope_kind = scope_kind_to_pb(inv.scope.scope_kind());
+    let scope_id = inv.scope.into_scope_id_string();
     InvitationPb {
         id: inv.id.to_string(),
         email: inv.email,
-        scope_kind: scope_kind_to_pb(inv.scope_kind),
-        scope_id: inv.scope_id,
+        scope_kind,
+        scope_id,
         scope_display_name,
         role: role_to_inv_pb(inv.role),
         inviter_user_id: inv
@@ -220,13 +219,13 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
             .await?;
         let billing_ids: Vec<&str> = invs
             .iter()
-            .filter(|i| i.scope_kind == ScopeKind::Billing)
-            .map(|i| i.scope_id.as_str())
+            .filter(|i| i.scope.scope_kind() == ScopeKind::Billing)
+            .map(|i| i.scope.scope_id_str())
             .collect();
         let org_ids: Vec<&str> = invs
             .iter()
-            .filter(|i| i.scope_kind == ScopeKind::Org)
-            .map(|i| i.scope_id.as_str())
+            .filter(|i| i.scope.scope_kind() == ScopeKind::Org)
+            .map(|i| i.scope.scope_id_str())
             .collect();
         let (billings, orgs) = futures::try_join!(
             self.state.repo.get_billing_accounts_by_ids(&billing_ids),
@@ -235,13 +234,13 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
         let out: Vec<InvitationPb> = invs
             .into_iter()
             .map(|inv| {
-                let display_name = match inv.scope_kind {
-                    ScopeKind::Billing => billings
-                        .get(&inv.scope_id)
+                let display_name = match &inv.scope {
+                    ScopeTarget::Billing(id) => billings
+                        .get(id.as_str())
                         .map(|b| b.display_name.clone())
                         .unwrap_or_default(),
-                    ScopeKind::Org => orgs
-                        .get(&inv.scope_id)
+                    ScopeTarget::Org(id) => orgs
+                        .get(id.as_str())
                         .map(|o| o.display_name.clone())
                         .unwrap_or_default(),
                 };
@@ -285,8 +284,8 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
             &self.state,
             &invitation.id,
             &invitation.email,
-            invitation.scope_kind,
-            &invitation.scope_id,
+            invitation.scope.scope_kind(),
+            invitation.scope.scope_id_str(),
             invitation.role,
             invitation.required_idp.as_deref(),
             &new_nonce,
@@ -338,13 +337,12 @@ impl<R: Repo, B: BillingProvider> InvitationServer<R, B> {
         if invitation.inviter_user_id.as_ref() == Some(&session.user) {
             return Ok(());
         }
-        match invitation.scope_kind {
-            ScopeKind::Billing => {
-                let billing_id = BillingAccountId::from(invitation.scope_id.as_str());
+        match &invitation.scope {
+            ScopeTarget::Billing(billing_id) => {
                 if let Some(mem) = self
                     .state
                     .repo
-                    .get_billing_membership(&session.user, &billing_id)
+                    .get_billing_membership(&session.user, billing_id)
                     .await?
                     && mem.role == crate::domain::Role::Owner
                 {
@@ -354,12 +352,11 @@ impl<R: Repo, B: BillingProvider> InvitationServer<R, B> {
                     "only the inviter or a scope owner can manage this invitation",
                 ))
             }
-            ScopeKind::Org => {
-                let org_id = OrgId::from(invitation.scope_id.as_str());
+            ScopeTarget::Org(org_id) => {
                 let org = self
                     .state
                     .repo
-                    .get_organization(&org_id)
+                    .get_organization(org_id)
                     .await?
                     .ok_or_else(|| ConnectError::not_found("organization not found"))?;
                 require_org_or_billing_owner(&self.state, session, &org).await

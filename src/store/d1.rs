@@ -316,13 +316,13 @@ struct InvitationRow {
 impl TryFrom<InvitationRow> for Invitation {
     type Error = StoreError;
     fn try_from(r: InvitationRow) -> Result<Self, StoreError> {
+        let scope_kind: ScopeKind = r
+            .scope_kind
+            .parse()
+            .map_err(|e: String| StoreError::backend(format!("scope_kind: {e}")))?;
         Ok(Invitation {
             id: InvitationId::from_string(r.id),
-            scope_kind: r
-                .scope_kind
-                .parse()
-                .map_err(|e: String| StoreError::backend(format!("scope_kind: {e}")))?,
-            scope_id: r.scope_id,
+            scope: ScopeTarget::from_parts(scope_kind, r.scope_id),
             email: r.email,
             role: r
                 .role
@@ -1453,8 +1453,8 @@ impl InvitationRepo for D1Repo {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 &[
                     D1Type::Text(invitation.id.as_str()),
-                    D1Type::Text(invitation.scope_kind.as_str()),
-                    D1Type::Text(&invitation.scope_id),
+                    D1Type::Text(invitation.scope.scope_kind().as_str()),
+                    D1Type::Text(invitation.scope.scope_id_str()),
                     D1Type::Text(&invitation.email),
                     D1Type::Text(&email_lower),
                     D1Type::Text(invitation.role.as_str()),
@@ -1471,8 +1471,8 @@ impl InvitationRepo for D1Repo {
             return Err(StoreError::already_exists(format!(
                 "pending invite for {} on {}:{}",
                 invitation.email,
-                invitation.scope_kind.as_str(),
-                invitation.scope_id
+                invitation.scope.scope_kind().as_str(),
+                invitation.scope.scope_id_str()
             )));
         }
         Ok(())

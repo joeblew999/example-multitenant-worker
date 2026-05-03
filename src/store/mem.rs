@@ -897,19 +897,16 @@ impl SsoConfigRepo for InMemoryRepo {
 impl InvitationRepo for InMemoryRepo {
     async fn create_invitation(&self, invitation: Invitation) -> StoreResult<()> {
         let mut g = self.inner.lock().unwrap();
-        // Re-inviting the same address must go through refresh_invitation_token
-        // rather than stacking pending rows.
         if g.invitations.values().any(|i| {
             i.status == InvitationStatus::Pending
-                && i.scope_kind == invitation.scope_kind
-                && i.scope_id == invitation.scope_id
+                && i.scope == invitation.scope
                 && i.email.eq_ignore_ascii_case(&invitation.email)
         }) {
             return Err(StoreError::already_exists(format!(
                 "pending invite for {} on {}:{}",
                 invitation.email,
-                invitation.scope_kind.as_str(),
-                invitation.scope_id
+                invitation.scope.scope_kind().as_str(),
+                invitation.scope.scope_id_str()
             )));
         }
         g.invitations.insert(invitation.id.clone(), invitation);
@@ -943,8 +940,8 @@ impl InvitationRepo for InMemoryRepo {
             .values()
             .find(|i| {
                 i.status == InvitationStatus::Pending
-                    && i.scope_kind == scope_kind
-                    && i.scope_id == scope_id
+                    && i.scope.scope_kind() == scope_kind
+                    && i.scope.scope_id_str() == scope_id
                     && i.email.eq_ignore_ascii_case(email)
             })
             .cloned())

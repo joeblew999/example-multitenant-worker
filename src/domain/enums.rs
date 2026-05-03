@@ -164,10 +164,24 @@ pub enum ScopeTarget {
 }
 
 impl ScopeTarget {
+    pub fn scope_kind(&self) -> ScopeKind {
+        match self {
+            ScopeTarget::Billing(_) => ScopeKind::Billing,
+            ScopeTarget::Org(_) => ScopeKind::Org,
+        }
+    }
+
     pub fn scope_id_str(&self) -> &str {
         match self {
             ScopeTarget::Billing(id) => id.as_str(),
             ScopeTarget::Org(id) => id.as_str(),
+        }
+    }
+
+    pub fn into_scope_id_string(self) -> String {
+        match self {
+            ScopeTarget::Billing(id) => id.into_string(),
+            ScopeTarget::Org(id) => id.into_string(),
         }
     }
 

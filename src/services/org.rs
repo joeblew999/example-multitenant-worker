@@ -2,13 +2,11 @@
 //! immutable to their parent billing account (no transfers).
 
 use connectrpc::{ConnectError, RequestContext, Response, ServiceResult};
-use uuid::Uuid;
 
 use crate::auth::SessionContext;
 use crate::billing::BillingProvider;
 use crate::domain::{
-    BillingAccountId, Invitation, InvitationId, InvitationStatus, OrgId, Organization, Role,
-    ScopeKind, SsoConfig, UserId,
+    BillingAccountId, OrgId, Organization, Role, ScopeKind, ScopeTarget, SsoConfig, UserId,
 };
 use crate::middleware::require_session;
 use crate::proto::workers::org::v1::{
@@ -20,11 +18,8 @@ use crate::proto::workers::org::v1::{
     OwnedListOrganizationsRequestView, OwnedRemoveMemberRequestView,
     OwnedUpdateMemberRoleRequestView, RemoveMemberResponse, UpdateMemberRoleResponse,
 };
-use crate::services::auth::build_invitation_token;
-use crate::services::authz::{
-    require_billing_owner, require_org_or_billing_owner, resolve_required_sso,
-};
-use crate::services::common::{role_from_i32, validate_email};
+use crate::services::authz::{require_billing_owner, require_org_or_billing_owner};
+use crate::services::common::{InviteMemberParams, execute_invite_member, role_from_i32};
 use crate::services::convert::{sso_kind_to_domain, sso_to_pb};
 use crate::state::SharedState;
 use crate::store::Repo;
@@ -210,10 +205,6 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
             .await?
             .ok_or_else(|| ConnectError::not_found("organization not found"))?;
         require_org_or_billing_owner(&self.state, &session, &org).await?;
-        validate_email(request.email)?;
-        let role = role_from_i32(request.role.to_i32())?;
-        let now_ms = self.state.clock.now_ms();
-        let now_unix = self.state.clock.now_unix_seconds();
 
         if let Some(target_user) = self.state.repo.get_user_by_email(request.email).await?
             && self
@@ -228,69 +219,21 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
             ));
         }
 
-        // Freeze the required IdP at issuance time so subsequent SSO config
-        // changes can't unlock outstanding invitations.
-        let required_idp =
-            resolve_required_sso(&self.state, &org.billing_account_id, Some(&org_id))
-                .await?
-                .filter(|c| c.required)
-                .map(|c| c.idp_id);
-
-        let nonce = format!("inv_{}", Uuid::new_v4());
-        let expires_at_ms = now_ms + self.state.config.invitation_ttl_seconds * 1000;
-        let existing = self
-            .state
-            .repo
-            .list_pending_invitation_by_scope_email(ScopeKind::Org, org_id.as_str(), request.email)
-            .await?;
-
-        let invitation = match existing {
-            Some(mut inv) => {
-                self.state
-                    .repo
-                    .refresh_invitation_token(&inv.id, nonce.clone(), expires_at_ms)
-                    .await?;
-                inv.nonce = nonce.clone();
-                inv.expires_at_ms = expires_at_ms;
-                inv.role = role;
-                inv.required_idp = required_idp.clone();
-                inv.status = InvitationStatus::Pending;
-                inv
-            }
-            None => {
-                let inv = Invitation {
-                    id: InvitationId::new(),
-                    scope_kind: ScopeKind::Org,
-                    scope_id: org_id.to_string(),
-                    email: request.email.to_owned(),
-                    role,
-                    inviter_user_id: Some(session.user.clone()),
-                    required_idp: required_idp.clone(),
-                    nonce: nonce.clone(),
-                    expires_at_ms,
-                    status: InvitationStatus::Pending,
-                    created_at_ms: now_ms,
-                };
-                self.state.repo.create_invitation(inv.clone()).await?;
-                inv
-            }
-        };
-
-        let token = build_invitation_token(
+        let result = execute_invite_member(
             &self.state,
-            &invitation.id,
-            &invitation.email,
-            ScopeKind::Org,
-            org_id.as_str(),
-            role,
-            required_idp.as_deref(),
-            &nonce,
-            now_unix,
-        )?;
+            InviteMemberParams {
+                email: request.email,
+                role_i32: request.role.to_i32(),
+                inviter_user_id: &session.user,
+                scope: ScopeTarget::Org(org_id.clone()),
+                billing_account_id: &org.billing_account_id,
+            },
+        )
+        .await?;
 
         Response::ok(InviteMemberResponse {
-            invitation_id: invitation.id.to_string(),
-            invite_token_for_demo: token,
+            invitation_id: result.invitation_id.to_string(),
+            invite_token_for_demo: result.invite_token,
             ..Default::default()
         })
     }
