@@ -48,10 +48,8 @@ pub trait BillingProvider: Send + Sync + 'static {
     ) -> impl Future<Output = StoreResult<()>> + Send;
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub use native::InMemoryBillingProvider;
 
-#[cfg(not(target_arch = "wasm32"))]
 mod native {
     use super::*;
     use std::collections::HashMap;

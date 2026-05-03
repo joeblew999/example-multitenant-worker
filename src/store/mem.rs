@@ -1,8 +1,6 @@
 //! In-memory implementation of [`Repo`]. Native unit tests run against
 //! this; D1 is wasm-only.
 
-#![cfg(not(target_arch = "wasm32"))]
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 
