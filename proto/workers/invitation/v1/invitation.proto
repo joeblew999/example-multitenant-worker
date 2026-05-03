@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package workers.invitation.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Invitation lifecycle.
+//
+// The link a user opens is a `purpose=invite` macaroon with `invitation_id`,
+// `nonce`, `email`, `scope`, `role`, `required_idp` (optional), `exp` (7d
+// default). Acceptance consumes the nonce in `consumed_nonces` and creates
+// a membership row.
+service InvitationService {
+  // Decode a token for the accept-page preview. Doesn't consume the nonce.
+  rpc GetInvitation(GetInvitationRequest) returns (GetInvitationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Accept as the *current* user. The current session's email must match
+  // the invite email.
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+
+  rpc DeclineInvitation(DeclineInvitationRequest) returns (DeclineInvitationResponse);
+
+  // Pending invitations whose email matches the current session's email.
+  rpc ListPendingInvitations(ListPendingInvitationsRequest) returns (ListPendingInvitationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Inviter-side ops.
+  rpc ResendInvitation(ResendInvitationRequest) returns (ResendInvitationResponse);
+  rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse);
+}
+
+message GetInvitationRequest { string token = 1; }
+message GetInvitationResponse { Invitation invitation = 1; }
+
+message AcceptInvitationRequest { string token = 1; }
+message AcceptInvitationResponse {
+  Invitation invitation = 1;
+  // The membership scope the caller now has. The caller can call
+  // SwitchContext to enter it.
+  ScopeKind scope_kind = 2;
+  string scope_id = 3;
+  Role role = 4;
+}
+
+message DeclineInvitationRequest { string token = 1; }
+message DeclineInvitationResponse {}
+
+message ListPendingInvitationsRequest {}
+message ListPendingInvitationsResponse { repeated Invitation invitations = 1; }
+
+message ResendInvitationRequest { string invitation_id = 1; }
+message ResendInvitationResponse {
+  Invitation invitation = 1;
+  string invite_token_for_demo = 2;
+}
+
+message RevokeInvitationRequest { string invitation_id = 1; }
+message RevokeInvitationResponse {}
+
+// Shared messages.
+
+message Invitation {
+  string id = 1;
+  string email = 2;
+  ScopeKind scope_kind = 3;
+  string scope_id = 4;
+  string scope_display_name = 5;
+  Role role = 6;
+  string inviter_user_id = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  InvitationStatus status = 9;
+  // The required IdP for SSO-protected scopes (frozen at issuance time).
+  optional string required_idp = 10;
+}
+
+// Enums.
+
+// Membership privilege level within the invited scope.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_OWNER = 1;
+  ROLE_MEMBER = 2;
+}
+
+// Lifecycle state of an invitation.
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_PENDING = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_DECLINED = 3;
+  INVITATION_STATUS_REVOKED = 4;
+  INVITATION_STATUS_EXPIRED = 5;
+}
+
+// Whether the invitation targets a billing account or an organization.
+enum ScopeKind {
+  SCOPE_KIND_UNSPECIFIED = 0;
+  SCOPE_KIND_BILLING = 1;
+  SCOPE_KIND_ORG = 2;
+}

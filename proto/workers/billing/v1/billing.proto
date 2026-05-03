@@ -1,0 +1,180 @@
+syntax = "proto3";
+
+package workers.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Billing-account scope: payment + SSO root + parent of organizations.
+service BillingService {
+  rpc GetBillingAccount(GetBillingAccountRequest) returns (GetBillingAccountResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListBillingAccounts(ListBillingAccountsRequest) returns (ListBillingAccountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Member management. `InviteMember` mints an invitation macaroon and
+  // returns its delivery payload (the demo echoes the token; production
+  // would email it).
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse);
+
+  // Subscription management — a single flat subscription per billing
+  // account. Backed by the BillingProvider trait (mock in the demo).
+  rpc SetPaymentMethod(SetPaymentMethodRequest) returns (SetPaymentMethodResponse);
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListInvoices(ListInvoicesRequest) returns (ListInvoicesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
+
+  rpc ConfigureSso(ConfigureSsoRequest) returns (ConfigureSsoResponse);
+  rpc SetAutoJoinDomain(SetAutoJoinDomainRequest) returns (SetAutoJoinDomainResponse);
+
+  // Refused for personal billing accounts (1:1 lifecycle with the user) and
+  // for non-personal accounts that still own organizations.
+  rpc DeleteBillingAccount(DeleteBillingAccountRequest) returns (DeleteBillingAccountResponse);
+}
+
+message GetBillingAccountRequest { string id = 1; }
+message GetBillingAccountResponse { BillingAccount account = 1; }
+
+message ListBillingAccountsRequest {}
+message ListBillingAccountsResponse { repeated BillingAccount accounts = 1; }
+
+message InviteMemberRequest {
+  string billing_account_id = 1;
+  string email = 2;
+  Role role = 3;
+}
+
+message InviteMemberResponse {
+  string invitation_id = 1;
+  // Demo only: in production this is delivered via email.
+  string invite_token_for_demo = 2;
+}
+
+message RemoveMemberRequest {
+  string billing_account_id = 1;
+  string user_id = 2;
+}
+message RemoveMemberResponse {}
+
+message UpdateMemberRoleRequest {
+  string billing_account_id = 1;
+  string user_id = 2;
+  Role role = 3;
+}
+message UpdateMemberRoleResponse {}
+
+message SetPaymentMethodRequest {
+  string billing_account_id = 1;
+  string payment_method_token = 2;
+}
+message SetPaymentMethodResponse {}
+
+message GetSubscriptionRequest { string billing_account_id = 1; }
+message GetSubscriptionResponse { Subscription subscription = 1; }
+
+message ListInvoicesRequest { string billing_account_id = 1; }
+message ListInvoicesResponse { repeated Invoice invoices = 1; }
+
+message CancelSubscriptionRequest { string billing_account_id = 1; }
+message CancelSubscriptionResponse { Subscription subscription = 1; }
+
+message ConfigureSsoRequest {
+  string billing_account_id = 1;
+  string idp_id = 2;
+  SsoKind kind = 3;
+  string login_url = 4;
+  bool required = 5;
+}
+message ConfigureSsoResponse { SsoConfig sso = 1; }
+
+message SetAutoJoinDomainRequest {
+  string billing_account_id = 1;
+  string domain = 2;
+}
+message SetAutoJoinDomainResponse {}
+
+message DeleteBillingAccountRequest { string billing_account_id = 1; }
+message DeleteBillingAccountResponse {}
+
+// Shared messages.
+
+message BillingAccount {
+  string id = 1;
+  string display_name = 2;
+  bool personal = 3;
+  // User id, when personal.
+  string owner_user_id = 4;
+  // Auto-join domain, if configured. e.g. "acme.com".
+  string auto_join_domain = 5;
+  optional SsoConfig sso = 6;
+}
+
+// SSO identity-provider configuration attached to a billing account or org.
+message SsoConfig {
+  string idp_id = 1;
+  SsoKind kind = 2;
+  string login_url = 3;
+  // The user who configured SSO. Retains password access (break-glass).
+  string break_glass_user_id = 4;
+  // When true, sessions in the protected scope must have
+  // `auth_method=sso:<idp_id>` (or be the break-glass user).
+  bool required = 5;
+}
+
+message Subscription {
+  string billing_account_id = 1;
+  string plan = 2;
+  SubscriptionStatus status = 3;
+  optional string payment_method_token = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message Invoice {
+  string id = 1;
+  string billing_account_id = 2;
+  int64 amount_cents = 3;
+  string currency = 4;
+  InvoiceStatus status = 5;
+  google.protobuf.Timestamp issued_at = 6;
+}
+
+// Enums.
+
+// Membership privilege level within a billing account or organization.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_OWNER = 1;
+  ROLE_MEMBER = 2;
+}
+
+// SSO identity-provider protocol.
+enum SsoKind {
+  SSO_KIND_UNSPECIFIED = 0;
+  SSO_KIND_OIDC = 1;
+  SSO_KIND_SAML = 2;
+}
+
+// Lifecycle state of a billing subscription.
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_STATUS_ACTIVE = 1;
+  SUBSCRIPTION_STATUS_PAST_DUE = 2;
+  SUBSCRIPTION_STATUS_CANCELED = 3;
+  // No subscription exists yet for this billing account.
+  SUBSCRIPTION_STATUS_NONE = 4;
+}
+
+// Payment state of an invoice.
+enum InvoiceStatus {
+  INVOICE_STATUS_UNSPECIFIED = 0;
+  INVOICE_STATUS_PAID = 1;
+  INVOICE_STATUS_OPEN = 2;
+  INVOICE_STATUS_VOID = 3;
+}

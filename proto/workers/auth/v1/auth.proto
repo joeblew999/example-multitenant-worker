@@ -1,0 +1,211 @@
+syntax = "proto3";
+
+package workers.auth.v1;
+
+// Authentication and session lifecycle.
+//
+// Every artifact in this service is backed by a libmacaroon token. Sessions
+// carry caveats (`user`, `billing`, `org`, `role`, `auth_method`, `exp`) and
+// verification is pure — no DB reads on the hot path.
+service AuthService {
+  // Create a new user + personal billing account, returning a session.
+  // If `invite_token` is supplied, the invite is consumed atomically and a
+  // membership in the invited scope is created.
+  rpc Signup(SignupRequest) returns (SignupResponse);
+
+  // Exchange password credentials for a session. Refused if SSO is enforced
+  // on the user's personal billing account and the caller isn't the
+  // break-glass user.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Begin an SSO flow. Returns a URL the client should redirect the user to.
+  // `scope_hint` carries a billing or org id when the caller knows which
+  // scope to enforce; otherwise the IdP is resolved from the JIT email.
+  rpc SsoStart(SsoStartRequest) returns (SsoStartResponse);
+
+  // Complete an SSO flow with an IdP-provided assertion. In production this
+  // is invoked by the `/oauth/callback` HTTP route after exchanging the
+  // OAuth code with the IdP; for the demo we expose the assertion directly
+  // so tests can drive the flow without standing up a real IdP.
+  rpc SsoComplete(SsoCompleteRequest) returns (SsoCompleteResponse);
+
+  // Attach an additional identity to the current user (linking, never auto).
+  rpc LinkIdentity(LinkIdentityRequest) returns (LinkIdentityResponse);
+
+  // Change password for the current user. Requires the current password and
+  // a `password` identity to exist on the account.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // Issue a 15-minute reset macaroon. The response is identical for known
+  // and unknown emails to avoid enumeration.
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+
+  // Consume a reset macaroon and set the new password. Returns a fresh
+  // session for convenience.
+  rpc ConsumePasswordReset(ConsumePasswordResetRequest) returns (ConsumePasswordResetResponse);
+
+  // Switch the current scope (billing/org) and re-mint the session. Doubles
+  // as the sliding-refresh path.
+  rpc SwitchContext(SwitchContextRequest) returns (SwitchContextResponse);
+
+  rpc Whoami(WhoamiRequest) returns (WhoamiResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message SignupRequest {
+  string email = 1;
+  string password = 2;
+  // When set, consumes an invite, joins the invited scope, and writes the
+  // resulting membership in the same code path as user creation.
+  optional string invite_token = 3;
+}
+
+message SignupResponse {
+  string session_token = 1;
+  WhoamiInfo whoami = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string session_token = 1;
+  WhoamiInfo whoami = 2;
+}
+
+message SsoStartRequest {
+  // billing_account_id, org_id, or email — used to look up which IdP to
+  // route to. Format: `billing:<id>`, `org:<id>`, or `email:<addr>`.
+  string scope_hint = 1;
+}
+
+message SsoStartResponse {
+  string redirect_url = 1;
+  // Opaque value the IdP echoes back to /oauth/callback. The state is bound
+  // to the requested scope so a callback can't be relayed onto a different
+  // scope.
+  string state = 2;
+}
+
+message SsoCompleteRequest {
+  // Echoed from `SsoStartResponse.state`.
+  string state = 1;
+  // IdP-asserted user identifier (`sub` for OIDC, `nameid` for SAML).
+  string idp_user_id = 2;
+  // IdP-asserted email.
+  string email = 3;
+  // The IdP id the user authenticated against.
+  string idp_id = 4;
+}
+
+message SsoCompleteResponse {
+  string session_token = 1;
+  WhoamiInfo whoami = 2;
+  // True if this completion JIT-created a new user.
+  bool jit_created = 3;
+}
+
+message LinkIdentityRequest {
+  // `password`, `github`, `google`, or `sso:<idp_id>`.
+  string provider = 1;
+  // OAuth code or IdP-asserted user id (mocked for the demo).
+  string code = 2;
+}
+
+message LinkIdentityResponse {
+  string identity_id = 1;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+
+// Always succeeds for the caller, regardless of whether the email exists.
+// In production the macaroon is delivered via email; the demo returns it
+// directly so tests can drive the flow.
+message RequestPasswordResetResponse {
+  // Empty when the email does not match a known user. Set when it does.
+  // Production would never expose this directly.
+  optional string reset_token_for_demo = 1;
+}
+
+message ConsumePasswordResetRequest {
+  string token = 1;
+  string new_password = 2;
+}
+
+message ConsumePasswordResetResponse {
+  string session_token = 1;
+  WhoamiInfo whoami = 2;
+}
+
+message SwitchContextRequest {
+  optional string billing_account_id = 1;
+  optional string org_id = 2;
+}
+
+message SwitchContextResponse {
+  string session_token = 1;
+  WhoamiInfo whoami = 2;
+}
+
+message WhoamiRequest {}
+
+message WhoamiResponse {
+  WhoamiInfo whoami = 1;
+}
+
+// Decoded session state returned by every auth-flow entrypoint and Whoami.
+message WhoamiInfo {
+  string user_id = 1;
+  string email = 2;
+  bool email_verified = 3;
+  // The session's currently-scoped billing account id.
+  string billing_account_id = 4;
+  // Empty when the session is at billing scope.
+  string org_id = 5;
+  // The role for the current scope.
+  Role role = 6;
+  AuthMethod auth_method = 7;
+  // All billing accounts the user has any membership in.
+  repeated MembershipSummary billing_memberships = 8;
+  repeated MembershipSummary org_memberships = 9;
+}
+
+message MembershipSummary {
+  string scope_id = 1;
+  string display_name = 2;
+  Role role = 3;
+}
+
+// How the session was originally authenticated.
+message AuthMethod {
+  AuthMethodKind kind = 1;
+  // The IdP that authenticated the user. Set when kind is
+  // AUTH_METHOD_KIND_SSO; empty otherwise.
+  string idp_id = 2;
+}
+
+// Membership privilege level within a billing account or organization.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_OWNER = 1;
+  ROLE_MEMBER = 2;
+}
+
+// Credential type used to establish the session.
+enum AuthMethodKind {
+  AUTH_METHOD_KIND_UNSPECIFIED = 0;
+  AUTH_METHOD_KIND_PASSWORD = 1;
+  AUTH_METHOD_KIND_SSO = 2;
+}

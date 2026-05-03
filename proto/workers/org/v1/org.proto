@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package workers.org.v1;
+
+import "workers/billing/v1/billing.proto";
+
+// Organization scope: child of a billing account, immutable to its parent.
+service OrgService {
+  rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse);
+
+  // Org-level SSO. Precedence: org-level wins over billing-level fallback.
+  rpc ConfigureSso(ConfigureSsoRequest) returns (ConfigureSsoResponse);
+
+  rpc DeleteOrganization(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
+}
+
+message CreateOrganizationRequest {
+  string billing_account_id = 1;
+  string display_name = 2;
+}
+message CreateOrganizationResponse { Organization organization = 1; }
+
+message GetOrganizationRequest { string id = 1; }
+message GetOrganizationResponse { Organization organization = 1; }
+
+message ListOrganizationsRequest {
+  // When set, scopes the listing to a billing account; otherwise lists all
+  // orgs visible to the caller.
+  optional string billing_account_id = 1;
+}
+message ListOrganizationsResponse { repeated Organization organizations = 1; }
+
+message InviteMemberRequest {
+  string org_id = 1;
+  string email = 2;
+  Role role = 3;
+}
+message InviteMemberResponse {
+  string invitation_id = 1;
+  string invite_token_for_demo = 2;
+}
+
+message RemoveMemberRequest {
+  string org_id = 1;
+  string user_id = 2;
+}
+message RemoveMemberResponse {}
+
+message UpdateMemberRoleRequest {
+  string org_id = 1;
+  string user_id = 2;
+  Role role = 3;
+}
+message UpdateMemberRoleResponse {}
+
+message ConfigureSsoRequest {
+  string org_id = 1;
+  string idp_id = 2;
+  workers.billing.v1.SsoKind kind = 3;
+  string login_url = 4;
+  bool required = 5;
+}
+message ConfigureSsoResponse { workers.billing.v1.SsoConfig sso = 1; }
+
+message DeleteOrganizationRequest { string org_id = 1; }
+message DeleteOrganizationResponse {}
+
+// Shared messages.
+
+message Organization {
+  string id = 1;
+  string display_name = 2;
+  string billing_account_id = 3;
+  optional workers.billing.v1.SsoConfig sso = 4;
+  bool personal = 5;
+  // User id, when personal.
+  string owner_user_id = 6;
+}
+
+// Membership privilege level within the organization.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_OWNER = 1;
+  ROLE_MEMBER = 2;
+}
