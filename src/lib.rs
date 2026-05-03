@@ -118,15 +118,8 @@ fn load_keyring(env: &Env) -> Keyring {
     if raw.trim().is_empty() {
         return Keyring::dev_default();
     }
-    match Keyring::from_base64(&raw) {
-        Ok(k) => k,
-        Err(e) => {
-            // Don't fail the worker boot — fall back to the dev key with a
-            // log so wrangler dev keeps working when env is misconfigured.
-            worker::console_error!("invalid SESSION_KEY ({e}); using dev fallback");
-            Keyring::dev_default()
-        }
-    }
+    Keyring::from_base64(&raw)
+        .expect("SESSION_KEY is set but invalid — refusing to start with a broken key")
 }
 
 #[cfg(target_arch = "wasm32")]
