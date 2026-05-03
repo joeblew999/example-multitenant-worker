@@ -20,9 +20,9 @@ use crate::proto::workers::invitation::v1::{
     Role as RolePb, ScopeKind as ScopeKindPb,
 };
 use crate::services::auth::build_invitation_token;
+use crate::services::authz::require_org_or_billing_owner;
 use crate::services::common::{
-    fetch_user, map_already_exists_as_precondition, map_token_error, require_org_or_billing_owner,
-    validate_pending_invitation,
+    fetch_user, map_already_exists_as_precondition, map_token_error, validate_pending_invitation,
 };
 use crate::state::SharedState;
 use crate::store::{InvitationAcceptance, Repo};
@@ -93,7 +93,7 @@ fn invitation_to_pb_with_display(inv: Invitation, scope_display_name: String) ->
             .inviter_user_id
             .map(|u| u.to_string())
             .unwrap_or_default(),
-        expires_at: crate::services::common::ms_to_timestamp(inv.expires_at_ms),
+        expires_at: crate::services::convert::ms_to_timestamp(inv.expires_at_ms),
         status: invitation_status_to_pb(inv.status),
         required_idp: inv.required_idp,
         ..Default::default()

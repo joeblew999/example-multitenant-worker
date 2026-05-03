@@ -21,10 +21,11 @@ use crate::proto::workers::org::v1::{
     OwnedUpdateMemberRoleRequestView, RemoveMemberResponse, UpdateMemberRoleResponse,
 };
 use crate::services::auth::build_invitation_token;
-use crate::services::common::{
-    require_billing_owner, require_org_or_billing_owner, resolve_required_sso, role_from_i32,
-    sso_kind_to_domain, sso_to_pb, validate_email,
+use crate::services::authz::{
+    require_billing_owner, require_org_or_billing_owner, resolve_required_sso,
 };
+use crate::services::common::{role_from_i32, validate_email};
+use crate::services::convert::{sso_kind_to_domain, sso_to_pb};
 use crate::state::SharedState;
 use crate::store::Repo;
 

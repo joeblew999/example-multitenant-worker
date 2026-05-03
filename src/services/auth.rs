@@ -29,11 +29,15 @@ use crate::proto::workers::auth::v1::{
     OwnedSwitchContextRequestView, OwnedWhoamiRequestView, RequestPasswordResetResponse,
     SignupResponse, SsoCompleteResponse, SsoStartResponse, SwitchContextResponse, WhoamiResponse,
 };
+use crate::services::authz::resolve_required_sso;
 use crate::services::common::{
-    build_whoami, build_whoami_async, email_domain, fetch_membership_lists,
-    fetch_password_identity, fetch_user, find_personal_billing, issue_personal_session,
-    map_already_exists_as_precondition, map_password_error, map_token_error, parse_scope_kind,
-    resolve_required_sso, validate_email, validate_pending_invitation,
+    email_domain, fetch_password_identity, fetch_user, map_already_exists_as_precondition,
+    map_password_error, map_token_error, parse_scope_kind, validate_email,
+    validate_pending_invitation,
+};
+use crate::services::convert::build_whoami;
+use crate::services::session::{
+    build_whoami_async, fetch_membership_lists, find_personal_billing, issue_personal_session,
 };
 use crate::state::SharedState;
 use crate::store::{InvitationAcceptance, NewPasswordUser, NewSsoUser, Repo};

@@ -26,9 +26,10 @@ use crate::proto::workers::billing::v1::{
     SetAutoJoinDomainResponse, SetPaymentMethodResponse, UpdateMemberRoleResponse,
 };
 use crate::services::auth::build_invitation_token;
-use crate::services::common::{
-    invoice_status_to_pb, require_billing_member, require_billing_owner, resolve_required_sso,
-    role_from_i32, sso_kind_to_domain, sso_to_pb, subscription_to_pb, validate_email,
+use crate::services::authz::{require_billing_member, require_billing_owner, resolve_required_sso};
+use crate::services::common::{role_from_i32, validate_email};
+use crate::services::convert::{
+    invoice_status_to_pb, sso_kind_to_domain, sso_to_pb, subscription_to_pb,
 };
 use crate::state::SharedState;
 use crate::store::Repo;
@@ -317,7 +318,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
                     amount_cents: i.amount_cents,
                     currency: i.currency,
                     status: invoice_status_to_pb(&i.status),
-                    issued_at: crate::services::common::ms_to_timestamp(i.issued_at_ms),
+                    issued_at: crate::services::convert::ms_to_timestamp(i.issued_at_ms),
                     ..Default::default()
                 })
                 .collect(),
