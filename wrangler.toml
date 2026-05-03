@@ -1,0 +1,50 @@
+name = "workers-multitenant"
+main = "build/index.js"
+compatibility_date = "2026-04-22"
+
+[build]
+command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
+
+# Single shared D1 binding. The schema (users, identities, billing accounts,
+# orgs, memberships, invitations, consumed nonces, sso configs, subscriptions)
+# lives under `./migrations`.
+[[d1_databases]]
+binding = "DB"
+database_name = "workers-multitenant"
+migrations_dir = "migrations"
+database_id = "d9f8742e-0e85-4c23-a15e-5b4fb003a45f"
+
+# Static SPA bundle for the sign-up / login management UI. The Vite build in
+# `./web` writes to `./web/dist`. SPA fallback returns index.html for unknown
+# paths so React Router can take over; the explicit `run_worker_first` paths
+# (ConnectRPC services + non-RPC HTTP routes) always hit the Worker instead.
+[assets]
+directory = "./web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = [
+  "/healthz",
+  "/oauth/*",
+  "/verify-email",
+  "/workers.auth.v1.AuthService/*",
+  "/workers.billing.v1.BillingService/*",
+  "/workers.org.v1.OrgService/*",
+  "/workers.invitation.v1.InvitationService/*",
+]
+
+# Macaroon root key — base64(32 bytes). Generated with
+# `openssl rand -base64 32`. The key is overridden via miniflare's `bindings`
+# in integration tests, and falls back to a deterministic dev key when unset
+# so `wrangler dev` works without ceremony.
+[vars]
+SESSION_KEY = ""
+
+# Sliding session TTL (seconds). Default 24h.
+SESSION_TTL_SECONDS = "86400"
+INVITATION_TTL_SECONDS = "604800"
+PASSWORD_RESET_TTL_SECONDS = "900"
+EMAIL_VERIFY_TTL_SECONDS = "86400"
+
+# When unset / empty: email is auto-verified (the demo default).
+# Setting to "true" enables the gated verify-email flow.
+ENFORCE_EMAIL_VERIFICATION = ""
