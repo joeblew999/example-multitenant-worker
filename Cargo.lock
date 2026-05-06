@@ -85,9 +85,9 @@ dependencies = [
 
 [[package]]
 name = "buffa"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe57265ac5858082bf9a450654fa56e97fceda045d3e573eed4c2d3cf0b8dc0f"
+checksum = "bf099528faaa7841b5e6dec4a421c3983b0893f87600f84f35b033362278153b"
 dependencies = [
  "base64",
  "bytes",
@@ -100,9 +100,9 @@ dependencies = [
 
 [[package]]
 name = "buffa-codegen"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13e4d72f8cdc202c1939f8f74db0baf9c1035c7354214f2d8051ad99a9dfef53"
+checksum = "a50dd3ca45146a2878eb7854e8c54d1b299d4e0268d3ff1bebf78a15b78982d3"
 dependencies = [
  "buffa",
  "buffa-descriptor",
@@ -115,18 +115,18 @@ dependencies = [
 
 [[package]]
 name = "buffa-descriptor"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8473359a7a8cbad218bd2f0aa635d59a51b9a5dc2de3e50b125679dd411371a2"
+checksum = "7b60f63b38417e539089f6aaca6622a60dbdf8f656663c81e6870ae0788d2060"
 dependencies = [
  "buffa",
 ]
 
 [[package]]
 name = "buffa-types"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d4e05bf231bdefa79fdb7326be05e3b5be3809ec70bb2cb5dbd8b7f6944ed53"
+checksum = "4594a005d815df9a94aa8bb96fe5ba69a7cc3bb437539c9aad33a4d1ec864a15"
 dependencies = [
  "buffa",
  "bytes",
@@ -180,8 +180,9 @@ dependencies = [
 
 [[package]]
 name = "connectrpc"
-version = "0.3.3"
-source = "git+https://github.com/anthropics/connect-rust?rev=d0bee62d4a3f7316d092f9b3920fa694928c60ee#d0bee62d4a3f7316d092f9b3920fa694928c60ee"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c13a1ab697ef1ae93cc38b62e76ef8e634371967173879d47be9c78cce13e699"
 dependencies = [
  "base64",
  "buffa",
@@ -199,12 +200,14 @@ dependencies = [
  "tokio-util",
  "tower",
  "tracing",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
 name = "connectrpc-build"
-version = "0.3.3"
-source = "git+https://github.com/anthropics/connect-rust?rev=d0bee62d4a3f7316d092f9b3920fa694928c60ee#d0bee62d4a3f7316d092f9b3920fa694928c60ee"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e685634b5cabe1fbd3698d5da7dcae512152a1b7e5128eff6493920cf83b72f8"
 dependencies = [
  "anyhow",
  "buffa",
@@ -215,8 +218,9 @@ dependencies = [
 
 [[package]]
 name = "connectrpc-codegen"
-version = "0.3.3"
-source = "git+https://github.com/anthropics/connect-rust?rev=d0bee62d4a3f7316d092f9b3920fa694928c60ee#d0bee62d4a3f7316d092f9b3920fa694928c60ee"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3b8cec56e17c3cb4f02083b2607ff1a9a17566305cec807bd9d82a529e19bc0"
 dependencies = [
  "anyhow",
  "buffa",

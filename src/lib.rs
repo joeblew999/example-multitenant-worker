@@ -14,7 +14,7 @@ use tower::{Layer, Service};
 use worker::{Context, Env, HttpRequest, event};
 
 pub(crate) mod proto {
-    include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
+    connectrpc::include_generated!();
 }
 
 pub mod auth;
