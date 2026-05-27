@@ -24,10 +24,10 @@
   padding-left: 0;
   padding-right: 0;
 }
+/* Sidebar already shows the brand + nav, so the topbar is redundant
+ * on AppShell pages. Hide it entirely. */
 .shell:has(.group\/sidebar-wrapper) > .topbar {
-  padding-left: var(--space-xl);
-  padding-right: var(--space-xl);
-  margin-bottom: 0;
+  display: none;
 }
 
 /* ============================================================
@@ -128,13 +128,10 @@
    * (e.g. p-4), update the selector. */
   main.flex-1.p-6 { padding: 0.75rem; }
 
-  /* (4) Topbar nav duplicates the sidebar's items on AppShell pages.
-   * Hide the duplicated links on mobile — sidebar covers nav.
-   * REUSABLE WHEN: [editorial] + [Kumo Sidebar]. */
-  .shell:has(.group\/sidebar-wrapper) .topnav a,
-  .shell:has(.group\/sidebar-wrapper) .topnav button {
-    display: none;
-  }
+  /* (4) Topbar nav was hidden on AppShell pages here. Now obsolete:
+   * topbar's auth nav + SystemStatus are removed entirely in App.tsx,
+   * and the whole topbar is hidden on AppShell pages via the top-level
+   * `.shell:has(.group/sidebar-wrapper) > .topbar { display: none }`. */
 
   /* (5) Section header + right-side meta stack instead of crashing.
    * REUSABLE WHEN: [universal] for the flex pattern; the specific
