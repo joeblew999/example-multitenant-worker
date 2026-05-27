@@ -30,6 +30,7 @@ import {
   Textarea,
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
+import { DevAccounts } from "../components/DevAccounts";
 
 const BADGE_COLORS = [
   "orange",
@@ -76,6 +77,8 @@ export function Preview() {
           title="Theme showcase"
           description="Every Kumo primitive we use on real pages, in one place. Flip themes via the toggle in the top-right and watch what breaks."
         />
+
+        <DevAccounts />
 
         <Section title="Buttons" hint="All variants. Primary uses --color-kumo-brand; destructive uses --color-kumo-danger.">
           <div className="flex flex-wrap gap-3">

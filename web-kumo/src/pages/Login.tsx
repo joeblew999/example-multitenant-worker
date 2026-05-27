@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { authClient, errorMessage } from "../client";
+import { DevAccounts } from "../components/DevAccounts";
 
 // Only honor a `next` redirect if it's an internal, absolute path. Stops
 // `?next=https://evil.example/...` from bouncing the user offsite.
@@ -83,6 +84,8 @@ export function Login() {
             No account? <Link to="/signup">Sign up</Link>
           </span>
         </div>
+
+        <DevAccounts compact />
       </form>
     </div>
   );
