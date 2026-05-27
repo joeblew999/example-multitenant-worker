@@ -4,7 +4,16 @@
  * Source-of-truth for the credentials is `scripts/seed.mjs` — when you
  * change the seed, update this hardcoded list to match.
  *
- * Hidden by the VITE_SHOW_TEST_ACCOUNTS env var:
+ * ## Naming convention: all seed emails use the `.example` TLD
+ *
+ * Per RFC 6761 the `.example` TLD is permanently reserved for
+ * documentation and never resolves on the public internet. So real
+ * customers can NEVER collide with these test accounts, and devs can
+ * log into prod as alice@acme.example to test without shadowing a real
+ * user. Keep this convention if you add more demo accounts.
+ *
+ * ## Hidden by the VITE_SHOW_TEST_ACCOUNTS env var
+ *
  *   - undefined / "true"  →  shown   (default for this demo deploy)
  *   - "false"             →  hidden  (set in .env.production when this
  *                                     stack is ported to a real project)
@@ -28,28 +37,28 @@ interface DemoAccount {
 
 const ACCOUNTS: DemoAccount[] = [
   {
-    email: "alice@acme.io",
+    email: "alice@acme.example",
     label: "Alice (owner of 6 orgs)",
     scenario: "Owns Acme + 5 other orgs; multi-org scope-switcher demo",
     landAt: "/",
     badge: "orange",
   },
   {
-    email: "bob@acme.io",
+    email: "bob@acme.example",
     label: "Bob (multi-role)",
     scenario: "Member of Acme/Engineering, owner of Marketing — mixed-role rows",
     landAt: "/",
     badge: "blue",
   },
   {
-    email: "carol@partner.dev",
+    email: "carol@partner.example",
     label: "Carol (5 pending invites)",
     scenario: "Lots of pending invites across different orgs — invitations volume",
     landAt: "/invitations",
     badge: "purple",
   },
   {
-    email: "dave@late.io",
+    email: "dave@late.example",
     label: "Dave (pending billing invite)",
     scenario: "One pending invite to alice's billing scope",
     landAt: "/invitations",
@@ -131,8 +140,11 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
       </div>
 
       <p className="mt-4 text-kumo-subtle text-xs">
-        Test accounts are visible because <code className="font-mono">VITE_SHOW_TEST_ACCOUNTS</code> is unset or "true".
-        Set to "false" in .env.production to hide on real deployments.
+        Emails use the <code className="font-mono">.example</code> TLD per RFC&nbsp;6761 —
+        guaranteed never to collide with real user emails, so the seed is safe to run against
+        production. Visible because <code className="font-mono">VITE_SHOW_TEST_ACCOUNTS</code> is
+        unset or "true"; set to "false" in <code className="font-mono">.env.production</code> to
+        hide on real deployments.
       </p>
     </LayerCard>
   );

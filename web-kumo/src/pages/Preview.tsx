@@ -31,6 +31,7 @@ import {
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
 import { DevAccounts } from "../components/DevAccounts";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const BADGE_COLORS = [
   "orange",
@@ -77,6 +78,17 @@ export function Preview() {
           title="Theme showcase"
           description="Every Kumo primitive we use on real pages, in one place. Flip themes via the toggle in the top-right and watch what breaks."
         />
+
+        <LayerCard className="p-6">
+          <div className="mb-3">
+            <Text as="h2" variant="heading2">Theme</Text>
+            <p className="mt-1 text-kumo-subtle text-sm">
+              Live A/B switch between the editorial theme and Kumo's defaults.
+              Persists per-browser in <code className="font-mono">localStorage["wm.theme"]</code>.
+            </p>
+          </div>
+          <ThemeToggle />
+        </LayerCard>
 
         <DevAccounts />
 

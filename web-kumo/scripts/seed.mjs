@@ -2,16 +2,27 @@
 /**
  * Seed the local D1 with realistic data so the GUI has volume to render.
  *
+ * ## Naming convention: all seed emails use the `.example` TLD
+ *
+ * Per RFC 6761 the `.example` TLD is permanently reserved for
+ * documentation and never resolves on the public internet. So a real
+ * customer signing up with their real email can NEVER collide with a
+ * seed user, and the seed is safe to run against production. Devs can
+ * log into prod as alice@acme.example to test the live system without
+ * any risk of shadowing a real account.
+ *
+ * Keep this convention when adding new seed users — anything ending in
+ * `.example` is fair game, anything else risks colliding with a real
+ * customer email.
+ *
  * Scenario:
  *   - alice owns 6 orgs under her billing account (Acme, Engineering,
  *     Marketing, Sales, Operations + a deliberately long-named org)
  *   - bob is a multi-role player: owner of one org, member of others
  *   - carol is the "lots of pending invites" demo — 5 pending across
  *     different orgs, different inviters
- *   - 10+ minor users (eve/frank/grace/...) accept some invites, miss
- *     others, populate org member lists
- *   - one unicode user (für@müller.de) tests font rendering
- *   - one long-domain user tests email-column truncation
+ *   - 8+ minor users populate org member lists
+ *   - one unicode user (über@müller.example) tests font rendering
  *
  * Outputs a manifest at .seed.json with sessionTokens for each user.
  *
@@ -124,9 +135,9 @@ async function main() {
   // Core users
   // ──────────────────────────────────────────────────────────
   console.log("[seed] core users");
-  const alice = await ensureUser("alice@acme.io");
-  const carol = await ensureUser("carol@partner.dev");
-  const dave  = await ensureUser("dave@late.io");
+  const alice = await ensureUser("alice@acme.example");
+  const carol = await ensureUser("carol@partner.example");
+  const dave  = await ensureUser("dave@late.example");
 
   // ──────────────────────────────────────────────────────────
   // Alice's portfolio of orgs
@@ -146,47 +157,47 @@ async function main() {
   // Bob — multi-role: member of Acme + Eng, owner of Marketing
   // ──────────────────────────────────────────────────────────
   console.log("[seed] bob — multi-role");
-  let bob = await login("bob@acme.io");
+  let bob = await login("bob@acme.example");
   if (!bob) {
-    const inv = await tryInviteToOrg(alice, acme.id, "bob@acme.io");
+    const inv = await tryInviteToOrg(alice, acme.id, "bob@acme.example");
     bob = inv
-      ? await ensureUserWithInvite("bob@acme.io", inv.token)
-      : await ensureUser("bob@acme.io");
+      ? await ensureUserWithInvite("bob@acme.example", inv.token)
+      : await ensureUser("bob@acme.example");
   }
-  await tryInviteToOrg(alice, eng.id, "bob@acme.io");
-  await tryInviteToOrg(alice, mkt.id, "bob@acme.io", "ROLE_OWNER");
+  await tryInviteToOrg(alice, eng.id, "bob@acme.example");
+  await tryInviteToOrg(alice, mkt.id, "bob@acme.example", "ROLE_OWNER");
 
   // ──────────────────────────────────────────────────────────
-  // Other org members (accept invites on signup)
+  // Other org members (accept invites on signup) — all `.example` TLD
   // ──────────────────────────────────────────────────────────
   console.log("[seed] org members (auto-accept on signup)");
-  await inviteAndJoin(alice, eng.id, "eve@design.studio");
-  await inviteAndJoin(alice, eng.id, "frank@engineering.team");
-  await inviteAndJoin(alice, mkt.id, "grace@marketing.io");
-  await inviteAndJoin(alice, sales.id, "henry@sales.team");
+  await inviteAndJoin(alice, eng.id, "eve@design.example");
+  await inviteAndJoin(alice, eng.id, "frank@engineering.example");
+  await inviteAndJoin(alice, mkt.id, "grace@marketing.example");
+  await inviteAndJoin(alice, sales.id, "henry@sales.example");
   await inviteAndJoin(alice, sales.id, "ivy@a-rather-long-domain-name.example");
-  await inviteAndJoin(alice, ops.id, "jake@ops.io");
-  await inviteAndJoin(alice, ops.id, "kate@ops.io");
-  await inviteAndJoin(alice, bigName.id, "liam@team.io");
+  await inviteAndJoin(alice, ops.id, "jake@ops.example");
+  await inviteAndJoin(alice, ops.id, "kate@ops.example");
+  await inviteAndJoin(alice, bigName.id, "liam@team.example");
 
-  // Unicode display test (uses non-ASCII email local part)
-  await inviteAndJoin(alice, acme.id, "über@müller.de");
+  // Unicode display test (non-ASCII local part + non-ASCII domain).
+  await inviteAndJoin(alice, acme.id, "über@müller.example");
 
   // ──────────────────────────────────────────────────────────
   // Carol — the "lots of pending invites" demo user
   // ──────────────────────────────────────────────────────────
   console.log("[seed] carol — pending invites galore");
-  await tryInviteToOrg(alice, acme.id, "carol@partner.dev");
-  await tryInviteToOrg(alice, eng.id, "carol@partner.dev");
-  await tryInviteToOrg(alice, sales.id, "carol@partner.dev");
-  await tryInviteToOrg(alice, ops.id, "carol@partner.dev");
-  await tryInviteToOrg(alice, bigName.id, "carol@partner.dev", "ROLE_OWNER");
+  await tryInviteToOrg(alice, acme.id, "carol@partner.example");
+  await tryInviteToOrg(alice, eng.id, "carol@partner.example");
+  await tryInviteToOrg(alice, sales.id, "carol@partner.example");
+  await tryInviteToOrg(alice, ops.id, "carol@partner.example");
+  await tryInviteToOrg(alice, bigName.id, "carol@partner.example", "ROLE_OWNER");
 
   // ──────────────────────────────────────────────────────────
   // Dave — pending billing invite (left over from v1 demo)
   // ──────────────────────────────────────────────────────────
   console.log("[seed] dave — pending billing invite");
-  await tryInviteToBilling(alice, alice.whoami.billingAccountId, "dave@late.io", "ROLE_MEMBER");
+  await tryInviteToBilling(alice, alice.whoami.billingAccountId, "dave@late.example", "ROLE_MEMBER");
 
   // ──────────────────────────────────────────────────────────
   // Manifest
