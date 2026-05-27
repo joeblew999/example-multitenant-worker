@@ -16,7 +16,6 @@ import {
   Empty,
   Field,
   Input,
-  Label,
   LayerCard,
   Loader,
   Pagination,
@@ -106,38 +105,36 @@ export function Preview() {
           ))}
         </Section>
 
-        <Section title="Form controls" hint="Field + Label + Input + Textarea + Select + Checkbox + Radio + Switch.">
-          <Field>
-            <Label>Email</Label>
+        <Section title="Form controls" hint="Field + Input + Textarea + Select + Checkbox + Radio + Switch.">
+          <Field label="Email">
             <Input type="email" placeholder="you@example.com" />
           </Field>
-          <Field>
-            <Label>Notes</Label>
+          <Field label="Notes">
             <Textarea placeholder="Multi-line input…" rows={3} />
           </Field>
-          <Field>
-            <Label>Region</Label>
-            <Select value={select} onValueChange={(v) => setSelect(String(v))}>
-              <Select.Trigger />
-              <Select.Content>
-                <Select.Item value="us-east">US East</Select.Item>
-                <Select.Item value="eu-west">EU West</Select.Item>
-                <Select.Item value="ap-south">AP South</Select.Item>
-              </Select.Content>
-            </Select>
+          <Field label="Region">
+            <Select
+              value={select}
+              onValueChange={(v) => setSelect(String(v))}
+              items={{ "us-east": "US East", "eu-west": "EU West", "ap-south": "AP South" }}
+            />
           </Field>
-          <div className="flex items-center gap-4">
-            <Checkbox checked={check} onCheckedChange={(v) => setCheck(Boolean(v))}>
-              Send me updates
-            </Checkbox>
-            <Switch checked={sw} onCheckedChange={setSw}>
-              Notifications
-            </Switch>
+          <div className="flex items-center gap-6">
+            <Field label="Send me updates" controlFirst>
+              <Checkbox checked={check} onCheckedChange={(v) => setCheck(Boolean(v))} />
+            </Field>
+            <Field label="Notifications" controlFirst>
+              <Switch checked={sw} onCheckedChange={setSw} />
+            </Field>
           </div>
-          <RadioGroup value={radio} onValueChange={(v) => setRadio(String(v))}>
-            <Radio value="one">Option one</Radio>
-            <Radio value="two">Option two</Radio>
-            <Radio value="three">Option three</Radio>
+          <RadioGroup
+            legend="Option"
+            value={radio}
+            onValueChange={(v) => setRadio(String(v))}
+          >
+            <Radio.Item label="Option one" value="one" />
+            <Radio.Item label="Option two" value="two" />
+            <Radio.Item label="Option three" value="three" />
           </RadioGroup>
         </Section>
 
@@ -181,7 +178,12 @@ export function Preview() {
               </Table.Row>
             </Table.Body>
           </Table>
-          <Pagination total={42} pageSize={10} currentPage={2} onPageChange={() => {}} />
+          <Pagination
+            page={2}
+            setPage={() => {}}
+            perPage={10}
+            totalCount={42}
+          />
         </Section>
 
         <Section title="Loading + empty states" hint="Loader, SkeletonLine, Empty.">

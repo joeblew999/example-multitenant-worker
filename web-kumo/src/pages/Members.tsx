@@ -8,11 +8,11 @@ import {
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
 import { useAuth } from "../auth";
+import { Role } from "../../gen/workers/auth/v1/auth_pb.js";
 
-function roleBadge(role: string) {
-  const v = role === "ROLE_OWNER" ? "orange" : "neutral";
-  const label = role === "ROLE_OWNER" ? "owner" : "member";
-  return <Badge variant={v as never}>{label}</Badge>;
+function roleBadge(role: Role) {
+  const isOwner = role === Role.OWNER;
+  return <Badge variant={(isOwner ? "orange" : "neutral") as never}>{isOwner ? "owner" : "member"}</Badge>;
 }
 
 export function Members() {
@@ -24,7 +24,7 @@ export function Members() {
     kind: "Billing" | "Org";
     scopeId: string;
     displayName: string;
-    role: string;
+    role: Role;
   };
   const rows: Row[] = [
     ...whoami.billingMemberships.map((m) => ({

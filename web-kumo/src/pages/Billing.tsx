@@ -79,11 +79,11 @@ export function Billing() {
 
       {sub && (
         <div className="flex flex-col gap-3 p-6 rounded-lg bg-kumo-base ring ring-kumo-line">
-          <Text variant="heading2">Current subscription</Text>
+          <Text as="h2" variant="heading2">Current subscription</Text>
           <div className="flex items-center gap-4 flex-wrap">
-            <Text variant="body" className="text-kumo-subtle">Plan</Text>
+            <span className="text-kumo-subtle">Plan</span>
             <Badge variant={"neutral" as never}>{sub.plan || "—"}</Badge>
-            <Text variant="body" className="text-kumo-subtle">Status</Text>
+            <span className="text-kumo-subtle">Status</span>
             {statusBadge(sub.status)}
           </div>
         </div>
