@@ -1,21 +1,37 @@
-/* Tailwind v4 + Kumo (Cloudflare Orange theme is the default).
+/* Tailwind v4 + Kumo (editorial theme by default; toggle in topnav).
  *
  * Kumo enforces semantic tokens only — `bg-kumo-base`, `text-kumo-brand`,
  * etc. Do not use raw Tailwind color classes for brand surfaces.
- * Light/dark mode is automatic via CSS light-dark(); no `dark:` variants.
  *
- * legacy-styles.css holds the original hand-rolled design system. It is
- * imported here for backward compatibility while pages migrate one-by-one
- * to Kumo. Phase 2-5 of the Kumo conversion progressively removes its
- * usage. When the last reference is gone, delete the import + file.
+ * ## CSS layer architecture
+ *
+ * Cascade Layers spec: rules inside @layer LOSE to unlayered rules and
+ * to layers declared LATER. We use this to make the stack composable
+ * without specificity wars:
+ *
+ *   legacy   ← editorial design system (hand-rolled). Older, broadest.
+ *   theme    ← Kumo's @theme tokens (via @cloudflare/kumo/styles).
+ *   base     ← Kumo's base resets + theme-editorial token overrides.
+ *   components
+ *   utilities ← Tailwind + Kumo utility classes (bg-kumo-*, etc.).
+ *   editorial ← our hand-authored selector overrides that need to win
+ *               above utilities (sidebar reset, h1 Doto, etc.).
+ *
+ * Order: `legacy < theme < base < components < utilities < editorial`.
+ * That way Kumo's `bg-kumo-brand` utility naturally wins over the bare
+ * `button { background: ... }` rule in legacy — no `!important`, no
+ * compound-selector hacks. The editorial layer goes LAST for things we
+ * explicitly need to top all of it (sidebar reset, etc.).
  */
+
+@layer legacy, theme, base, components, utilities, editorial;
 
 @import "tailwindcss";
 @import "@cloudflare/kumo/styles";
-@import "./legacy-styles.css";
+@import "./legacy-styles.css" layer(legacy);
 @import "./styles/theme-editorial.css";
-@import "./styles/theme-editorial-extras.css";
-@import "./styles/layout-fixes.css";
+@import "./styles/theme-editorial-extras.css" layer(editorial);
+@import "./styles/layout-fixes.css" layer(editorial);
 
 /* Tailwind v4 only scans source files for utility-class names. Kumo's
  * components (Badge, Banner, Table, etc.) bake class strings into their

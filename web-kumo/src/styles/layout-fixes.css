@@ -1,16 +1,24 @@
-/* web-kumo-only layout fixes that extend legacy-styles.css.
+/* Cross-theme layout that extends legacy-styles.css for the web-kumo case.
  *
- * legacy-styles.css is byte-identical with example-multitenant-worker/web/
- * — the canonical editorial source. web/ has only 4 pages (no sidebar),
- * so `.shell { max-width: 1080px }` works there. web-kumo adds AppShell
- * (sidebar + main content) which needs the full viewport.
+ * Imported in styles.css under `@layer editorial`, so these selectors
+ * win over Kumo utilities AND legacy without specificity hacks.
  *
- * These rules are theme-agnostic (apply under editorial/kumo/fedramp).
+ * Each rule is annotated with `REUSABLE WHEN: <conditions>` so when
+ * porting to a new project you can skim the file and pick only the
+ * rules that apply to your stack.
+ *
+ * Stack tags used in the annotations:
+ *   [universal] — pure HTML/CSS; works in any project
+ *   [Kumo]      — requires @cloudflare/kumo (Sidebar or AppShell)
+ *   [editorial] — requires the legacy editorial shell (.shell .topbar
+ *                 .topnav classes from web/src/App.tsx pattern)
  */
 
-/* When a page mounts an AppShell (Kumo's Sidebar wrapper has this class),
- * lift the 1080px constraint and zero the shell padding so AppShell's own
- * <main className="p-6"> handles spacing. */
+/* ============================================================
+ * AppShell mounted = give it the full viewport.
+ * REUSABLE WHEN: [editorial] + [Kumo Sidebar].
+ * If your project doesn't have legacy .shell wrapper, drop this rule.
+ * ============================================================ */
 .shell:has(.group\/sidebar-wrapper) {
   max-width: none;
   padding-left: 0;
@@ -22,17 +30,16 @@
   margin-bottom: 0;
 }
 
-/* Topbar wrap on narrow viewports. The legacy @media (max-width: 720px)
- * block already adds flex-wrap, but with the ThemeToggle in the nav we
- * also need the nav itself to wrap and rows to break gracefully. */
+/* ============================================================
+ * Topbar responsive layout (≤720px / ≤480px).
+ * REUSABLE WHEN: [editorial] — needs .topbar + .topnav.
+ * ============================================================ */
 @media (max-width: 720px) {
   .topbar { flex-wrap: wrap; row-gap: var(--space-md); }
   .topnav { flex-wrap: wrap; row-gap: var(--space-sm); justify-content: flex-end; }
   .topnav .sep { display: none; }
   .topnav a { font-size: var(--caption); }
 }
-
-/* Even narrower (true mobile): topnav stacks under the brand. */
 @media (max-width: 480px) {
   .topbar { flex-direction: column; align-items: flex-start; }
   .topnav { width: 100%; justify-content: flex-start; }
@@ -40,14 +47,13 @@
 
 /* ============================================================
  * Mobile data + layout polish (≤720px).
- * Six issues that surface only at narrow viewports.
+ * Six fixes; tags differ per rule.
  * ============================================================ */
-
 @media (max-width: 720px) {
-  /* (1) Long IDs (`ba_<uuid>`, `u_<uuid>`) shouldn't take 4 lines.
-   * Truncate any inline mono text on mobile — covers .font-mono in
-   * tables AND the Dashboard kv-row spans. tap-to-see-full via title
-   * attr if needed (caller's responsibility). */
+
+  /* (1) Truncate long IDs to one line with ellipsis.
+   * REUSABLE WHEN: [universal] — any project rendering UUIDs/IDs in
+   * <span class="font-mono"> or <code class="font-mono">. */
   code.font-mono,
   span.font-mono,
   code.text-xs.font-mono {
@@ -59,40 +65,44 @@
     vertical-align: bottom;
   }
 
-  /* (2) Tables get a horizontal scroll wrapper at narrow widths.
-   * Kumo Table renders <table>; wrap that element so columns can extend
-   * past the viewport without crushing or hiding off-screen. */
+  /* (2) Tables get horizontal scroll instead of column-crushing.
+   * REUSABLE WHEN: [universal] — any project with <table>s (Kumo's
+   * Table or hand-rolled). */
   table {
     display: block;
     max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  /* Force header/body back to table layout INSIDE the scroll container
-   * so columns line up. */
   table > thead, table > tbody, table > tfoot {
     display: table;
     width: max-content;
     min-width: 100%;
   }
 
-  /* (3) AppShell main padding: 12px instead of 24px. */
+  /* (3) AppShell main padding: 12px instead of 24px.
+   * REUSABLE WHEN: [Kumo] — assumes <main className="flex-1 ... p-6">
+   * pattern from our AppShell. If your AppShell uses a different class
+   * (e.g. p-4), update the selector. */
   main.flex-1.p-6 { padding: 0.75rem; }
 
   /* (4) Topbar nav duplicates the sidebar's items on AppShell pages.
-   * Hide the link list AND the ThemeToggle here (sidebar covers nav;
-   * theme switch is a dev-only toy that doesn't need viewport real
-   * estate on phones). Brand + LIVE status stay. `!important` because
-   * ThemeToggle uses inline `style={{ display: "inline-flex" }}` which
-   * normally beats stylesheet rules. */
+   * Hide topnav links + ThemeToggle. Sidebar covers nav; theme switch
+   * is a dev-only toy that doesn't need viewport real estate on phones.
+   * REUSABLE WHEN: [editorial] + [Kumo Sidebar].
+   * Note: ThemeToggle uses inline `style={{ display: "inline-flex" }}`
+   * which beats CSS via cascade. We're in the editorial layer (last),
+   * but inline styles beat ALL layers. !important is the only fix. */
   .shell:has(.group\/sidebar-wrapper) .topnav a,
   .shell:has(.group\/sidebar-wrapper) .topnav button,
   .shell:has(.group\/sidebar-wrapper) .topnav > div[role="group"] {
     display: none !important;
   }
 
-  /* (5) PageHeader / KV / section header rows — stack title and right-
-   * side meta vertically instead of crushing horizontally. */
+  /* (5) Section header + right-side meta stack instead of crashing.
+   * REUSABLE WHEN: [universal] for the flex pattern; the specific
+   * selectors target .section-head (legacy), .kv > .row > .row (legacy),
+   * and Kumo's flex.items-center.justify-between rows. */
   .section-head,
   .kv > .row > .row,
   div.flex.items-center.justify-between {
@@ -100,44 +110,48 @@
     row-gap: 0.25rem;
   }
 
-  /* (6) Doto display titles cap a bit lower on mobile so "Members" /
-   * "Billing" don't take half the viewport vertically. */
+  /* (6) Cap Doto display titles on mobile.
+   * REUSABLE WHEN: [editorial] for .display; [Kumo] for h1.font-heading
+   * (Kumo PageHeader uses that class for its title). */
   .display, h1.font-heading {
     font-size: clamp(36px, 12vw, 56px);
   }
 }
 
-/* Mobile sidebar overlay (Kumo Sidebar's <768px sheet mode).
+/* ============================================================
+ * Mobile sidebar overlay (Kumo Sidebar's <768px sheet mode).
+ * REUSABLE WHEN: [Kumo Sidebar].
  *
  * Three fixes:
- *   1. Kumo renders the dialog with z-index: auto, so it falls behind the
- *      legacy topbar. Lift to a layer above the chrome.
- *   2. --sidebar-width on mobile is narrow (~9rem) and reads as a thin
- *      strip; widen to a usable sheet on small viewports.
- *   3. The dialog bg uses --color-kumo-base which in editorial mode is
- *      surface-raised, very close to the page surface. Add a right
- *      border + page-dim so the sheet visually separates.
- */
+ *   1. Kumo renders the sheet dialog with z-index: auto; lift it above
+ *      the page chrome.
+ *   2. --sidebar-width on mobile defaults to ~9rem; widen to a usable
+ *      sheet on small viewports. (Override the var, not width directly
+ *      — Kumo's slide-in transform depends on the var.)
+ *   3. Dialog bg uses --color-kumo-base which in editorial maps to
+ *      surface-raised, very close to page surface. Add a right border
+ *      + shadow so the sheet visually separates.
+ * ============================================================ */
 [role="dialog"]:has([data-sidebar="content"]) {
   z-index: 60;
-  /* Don't force width — let Kumo's --sidebar-width drive it. Forcing
-   * width breaks the slide-in transform calc. Just override the var
-   * itself so width stays bound to it. */
   --sidebar-width: min(80vw, 280px);
   border-right: 1px solid var(--border-visible);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Kumo emits a fixed-inset backdrop sibling with bg-black/50. It has no
- * explicit z-index — without these rules the legacy `.topbar` peeks
- * through on mobile when the sidebar opens. Pin the topbar into a low
- * stacking context, then layer the backdrop + sheet well above it. */
+/* The Kumo backdrop has no explicit z-index, so the topbar peeks
+ * through. Pin topbar into a low stacking context and put the backdrop
+ * above it. REUSABLE WHEN: [editorial] + [Kumo Sidebar]. */
 .topbar { position: relative; z-index: 1; }
 [data-sidebar-backdrop] { z-index: 50; }
 
-/* The MenuButton uses a plain <button>, so legacy-styles.css paints it
- * as a white pill. We want it as a ghost-style trigger that hugs the
- * page surface. */
+/* ============================================================
+ * MenuButton (mobile sidebar trigger) — ghost style not pill.
+ * REUSABLE WHEN: [editorial] — relies on the legacy global `button`
+ * rule that paints buttons as white pills, which we want to override
+ * for this specific trigger. If your project doesn't have that legacy
+ * rule, this selector is a no-op (still fine).
+ * ============================================================ */
 button[aria-label="Open menu"] {
   background: transparent;
   color: var(--text-primary);

@@ -1,17 +1,24 @@
-/* Hand-authored overrides that complement the generated theme-editorial.css.
+/* Hand-authored editorial overrides that the token generator can't emit.
  *
- * The token generator only emits CSS custom properties. These selectors
- * are too specific for the token system — they reset Kumo elements that
- * inherit unwanted styling from legacy-styles.css, or set typography
- * Kumo doesn't expose as a token.
+ * Imported in styles.css under `@layer editorial`, which is declared AFTER
+ * `utilities`. So selectors here naturally beat Kumo's utility classes
+ * (bg-kumo-brand etc.) without specificity hacks or !important.
+ *
+ * Things that belong HERE (not the generator):
+ *   - Selector-based overrides (sidebar reset, Kumo Button variant repaint)
+ *   - Typography props Kumo doesn't expose as tokens (font-family on h1)
+ *   - Anything keyed on data-* attributes
+ *
+ * Things that DO NOT belong here — put them in
+ * scripts/theme-generator/config.editorial.mjs and regen:
+ *   - Any --color-kumo-* / --text-color-kumo-* value
+ *   - Any theme-token assignment
  */
 
 /* legacy-styles.css applies `button { background: var(--text-display) }`
- * globally — that gives Login its white-pill primary look. But Kumo's
- * Sidebar.MenuButton is a <button> too, so without scoping every nav
- * item becomes a primary pill (= every link looks selected). Reset only
- * sidebar buttons; scoped to the editorial theme so flipping back to
- * default kumo/fedramp restores normal styling. */
+ * globally — that's Login's white-pill primary look. Kumo's Sidebar.MenuButton
+ * is a <button> too, so we'd inherit the pill if we didn't reset it.
+ * Editorial scope so flipping to default kumo/fedramp restores Kumo's nav. */
 [data-theme="editorial"] button[data-sidebar="menu-button"],
 [data-theme="editorial"] button[data-sidebar="menu-sub-button"],
 [data-theme="editorial"] button[data-sidebar="menu-action"],
@@ -37,15 +44,12 @@
   opacity: 1;
 }
 
-/* Same global-button conflict as the sidebar: Kumo's Button component
- * renders a <button> with variant utility classes (bg-kumo-brand,
- * bg-kumo-base+ring, bg-inherit, bg-kumo-danger). The legacy `button`
- * rule is UNLAYERED — it beats Kumo's @layer utilities by cascade —
- * so the legacy white-pill paints over every Kumo variant.
- *
- * Fix: re-paint each variant with a selector specific enough to beat
- * the bare `button` rule. Use the variant's own utility class as part
- * of the selector so we only target the buttons Kumo actually styled. */
+/* Strip the legacy white-pill chrome from Kumo Button instances (detect
+ * by `shrink-0` — legacy buttons don't use flex utilities). The variant
+ * paint itself comes from Kumo's own bg-kumo-* utility classes, which
+ * now win automatically because we're in the `editorial` layer above
+ * `utilities`... wait, no — we're LEAVING bg/color alone here so Kumo's
+ * utility class paints them. Only kill the legacy chrome (border, etc.). */
 [data-theme="editorial"] button.shrink-0 {
   border: 0;
   min-height: 0;
@@ -54,28 +58,10 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-[data-theme="editorial"] button.shrink-0.bg-kumo-brand {
-  background-color: var(--color-kumo-brand);
-  color: var(--text-display);
-}
-[data-theme="editorial"] button.shrink-0.bg-kumo-danger {
-  background-color: var(--color-kumo-danger);
-  color: var(--text-display);
-}
-[data-theme="editorial"] button.shrink-0.bg-kumo-base {
-  background-color: var(--color-kumo-base);
-  color: var(--text-color-kumo-default);
-  box-shadow: inset 0 0 0 1px var(--color-kumo-hairline);
-}
-[data-theme="editorial"] button.shrink-0.bg-inherit {
-  background: transparent;
-  color: var(--text-color-kumo-default);
-}
 
 /* Kumo's PageHeader title uses font-heading (resolves to body font).
- * Use the editorial display font (Doto) so page titles like "Members"
- * match Login's "Log in." hero display. Not a token — Kumo doesn't
- * expose font-family as themable. */
+ * Override to Doto so page titles match Login's "Log in." hero display.
+ * Kumo doesn't expose font-family as a token, so this is hand-authored. */
 [data-theme="editorial"] h1.font-heading {
   font-family: var(--font-display);
   font-weight: 500;
