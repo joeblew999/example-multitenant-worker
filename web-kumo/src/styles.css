@@ -1,0 +1,19 @@
+/* Tailwind v4 + Kumo (Cloudflare Orange theme is the default).
+ *
+ * Kumo enforces semantic tokens only — `bg-kumo-base`, `text-kumo-brand`,
+ * etc. Do not use raw Tailwind color classes for brand surfaces.
+ * Light/dark mode is automatic via CSS light-dark(); no `dark:` variants.
+ *
+ * legacy-styles.css holds the original hand-rolled design system. It is
+ * imported here for backward compatibility while pages migrate one-by-one
+ * to Kumo. Phase 2-5 of the Kumo conversion progressively removes its
+ * usage. When the last reference is gone, delete the import + file.
+ */
+
+@import "tailwindcss";
+@import "@cloudflare/kumo/styles";
+@import "./legacy-styles.css";
+
+html, body, #root {
+  height: 100%;
+}
