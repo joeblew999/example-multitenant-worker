@@ -31,16 +31,42 @@
 }
 
 /* ============================================================
- * Auth pages (login / signup / accept-invite) — vertically center
- * content so login form doesn't sit at the top with a huge void
- * between it and the footer. Only fires when AppShell ISN'T mounted.
- * REUSABLE WHEN: [editorial] — relies on .shell wrapper + the page
- * having a small flex element that doesn't grow.
+ * Auth pages (login / signup / accept-invite) — card layout.
+ *
+ * The form sits in a centered card with a raised surface; the rest of
+ * the viewport is the page background. This gives the empty space
+ * around the card visual meaning (page chrome, not waste), and matches
+ * the enterprise-SaaS login pattern.
+ *
+ * Only fires when AppShell ISN'T mounted, so Preview/Dashboard/etc.
+ * keep their full-width AppShell treatment.
+ * REUSABLE WHEN: [editorial] — relies on .shell + .page + .hero classes.
  * ============================================================ */
+/* Page still fills the viewport (min-height: 100vh from legacy stays)
+ * but main centers the card vertically — the void above and below the
+ * card becomes page chrome (intentional, like every SaaS login).
+ * Topbar floats at top, footer at bottom of the shell. */
 .shell:not(:has(.group\/sidebar-wrapper)) > main {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding: var(--space-xl) 0;
+}
+.shell:not(:has(.group\/sidebar-wrapper)) > main > .page {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-2xl) var(--space-xl);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  gap: var(--space-lg);
+}
+/* The display title is set up for full-page hero use (huge clamp size).
+ * Inside a 480px card, scale it down so it fits without dominating. */
+.shell:not(:has(.group\/sidebar-wrapper)) > main > .page .display {
+  font-size: clamp(32px, 6vw, 44px);
+  line-height: 1;
 }
 
 /* ============================================================
