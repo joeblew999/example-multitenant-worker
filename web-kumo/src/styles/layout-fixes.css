@@ -60,9 +60,11 @@
 }
 
 /* Kumo emits a fixed-inset backdrop sibling with bg-black/50. It has no
- * explicit z-index, so the legacy topbar peeks through. Bump it just
- * below the dialog. */
-[data-sidebar-backdrop] { z-index: 55; }
+ * explicit z-index — without these rules the legacy `.topbar` peeks
+ * through on mobile when the sidebar opens. Pin the topbar into a low
+ * stacking context, then layer the backdrop + sheet well above it. */
+.topbar { position: relative; z-index: 1; }
+[data-sidebar-backdrop] { z-index: 50; }
 
 /* The MenuButton uses a plain <button>, so legacy-styles.css paints it
  * as a white pill. We want it as a ghost-style trigger that hugs the
