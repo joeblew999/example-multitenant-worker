@@ -41,10 +41,12 @@ run_worker_first = [
 # `openssl rand -base64 32`. The key is overridden via miniflare's `bindings`
 # in integration tests, and falls back to a deterministic dev key when unset
 # so `wrangler dev` works without ceremony.
+# SESSION_KEY is managed as a SECRET (not a [vars] entry) — wrangler
+# rejects the same binding name in both namespaces. For local `wrangler
+# dev` the worker code falls back to a deterministic dev key when unset.
+# Production value is set via: `mise run worker:deploy` (which pipes
+# `fnox get SESSION_KEY` into `wrangler secret put SESSION_KEY`).
 [vars]
-SESSION_KEY = ""
-
-# Sliding session TTL (seconds). Default 24h.
 SESSION_TTL_SECONDS = "86400"
 INVITATION_TTL_SECONDS = "604800"
 PASSWORD_RESET_TTL_SECONDS = "900"
