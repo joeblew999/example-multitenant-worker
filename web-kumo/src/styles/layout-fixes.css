@@ -38,6 +38,75 @@
   .topnav { width: 100%; justify-content: flex-start; }
 }
 
+/* ============================================================
+ * Mobile data + layout polish (≤720px).
+ * Six issues that surface only at narrow viewports.
+ * ============================================================ */
+
+@media (max-width: 720px) {
+  /* (1) Long IDs (`ba_<uuid>`, `u_<uuid>`) shouldn't take 4 lines.
+   * Truncate any inline mono text on mobile — covers .font-mono in
+   * tables AND the Dashboard kv-row spans. tap-to-see-full via title
+   * attr if needed (caller's responsibility). */
+  code.font-mono,
+  span.font-mono,
+  code.text-xs.font-mono {
+    display: inline-block;
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  /* (2) Tables get a horizontal scroll wrapper at narrow widths.
+   * Kumo Table renders <table>; wrap that element so columns can extend
+   * past the viewport without crushing or hiding off-screen. */
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Force header/body back to table layout INSIDE the scroll container
+   * so columns line up. */
+  table > thead, table > tbody, table > tfoot {
+    display: table;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* (3) AppShell main padding: 12px instead of 24px. */
+  main.flex-1.p-6 { padding: 0.75rem; }
+
+  /* (4) Topbar nav duplicates the sidebar's items on AppShell pages.
+   * Hide the link list AND the ThemeToggle here (sidebar covers nav;
+   * theme switch is a dev-only toy that doesn't need viewport real
+   * estate on phones). Brand + LIVE status stay. `!important` because
+   * ThemeToggle uses inline `style={{ display: "inline-flex" }}` which
+   * normally beats stylesheet rules. */
+  .shell:has(.group\/sidebar-wrapper) .topnav a,
+  .shell:has(.group\/sidebar-wrapper) .topnav button,
+  .shell:has(.group\/sidebar-wrapper) .topnav > div[role="group"] {
+    display: none !important;
+  }
+
+  /* (5) PageHeader / KV / section header rows — stack title and right-
+   * side meta vertically instead of crushing horizontally. */
+  .section-head,
+  .kv > .row > .row,
+  div.flex.items-center.justify-between {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  /* (6) Doto display titles cap a bit lower on mobile so "Members" /
+   * "Billing" don't take half the viewport vertically. */
+  .display, h1.font-heading {
+    font-size: clamp(36px, 12vw, 56px);
+  }
+}
+
 /* Mobile sidebar overlay (Kumo Sidebar's <768px sheet mode).
  *
  * Three fixes:
