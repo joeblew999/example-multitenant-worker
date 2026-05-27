@@ -79,11 +79,11 @@ export function Preview() {
 
         <Section title="Buttons" hint="All variants. Primary uses --color-kumo-brand; destructive uses --color-kumo-danger.">
           <div className="flex flex-wrap gap-3">
-            <Button>Primary</Button>
+            <Button variant="primary">Primary</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="destructive">Destructive</Button>
-            <Button disabled>Disabled</Button>
+            <Button variant="secondary" disabled>Disabled</Button>
           </div>
         </Section>
 
