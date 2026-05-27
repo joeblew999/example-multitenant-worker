@@ -8,6 +8,7 @@ import {
   Text,
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
+import { PageLoading } from "../components/PageLoading";
 import { billingClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
 import type { BillingAccount, Subscription } from "../../gen/workers/billing/v1/billing_pb.js";
@@ -73,9 +74,7 @@ export function Billing() {
 
       {error && <Banner variant="error">{error}</Banner>}
 
-      {accounts === null && !error && (
-        <Empty title="Loading…" description="Fetching from BillingService.ListBillingAccounts." />
-      )}
+      {accounts === null && !error && <PageLoading label="Loading billing accounts" />}
 
       {sub && (
         <div className="flex flex-col gap-3 p-6 rounded-lg bg-kumo-base ring ring-kumo-line">

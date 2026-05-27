@@ -8,6 +8,7 @@ import {
   Text,
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
+import { PageLoading } from "../components/PageLoading";
 import { invitationClient, errorMessage } from "../client";
 import type { Invitation } from "../../gen/workers/invitation/v1/invitation_pb.js";
 import {
@@ -91,12 +92,7 @@ export function Invitations() {
 
       {error && <Banner variant="error">{error}</Banner>}
 
-      {invites === null && !error && (
-        <Empty
-          title="Loading…"
-          description="Fetching pending invitations from InvitationService.ListPendingInvitations."
-        />
-      )}
+      {invites === null && !error && <PageLoading label="Loading invitations" />}
 
       {invites !== null && invites.length === 0 && (
         <Empty
@@ -136,11 +132,7 @@ export function Invitations() {
 
       <Banner variant="default">
         <Text variant="body">
-          To accept or decline, follow the link from your invitation email.
-          That flow lives at <code className="font-mono">/invite/:token</code>{" "}
-          and verifies the macaroon. List-and-act in-app needs an
-          <code className="font-mono"> AcceptInvitationById</code> RPC that
-          isn't in the proto yet.
+          To accept or decline an invitation, use the link from your invitation email.
         </Text>
       </Banner>
     </div>

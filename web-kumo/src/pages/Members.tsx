@@ -57,11 +57,8 @@ export function Members() {
 
       <Banner variant="default">
         <Text variant="body">
-          Showing data from the <code className="font-mono">whoami</code>{" "}
-          session — your own scope memberships. There isn't yet a{" "}
-          <code className="font-mono">ListMembers</code> RPC to enumerate
-          others in each scope; that's gated behind the Cedar middleware
-          rollout.
+          Showing your own memberships across billing and org scopes.
+          Viewing all members of each scope is coming soon.
         </Text>
       </Banner>
 

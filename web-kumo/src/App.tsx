@@ -9,8 +9,17 @@ import { Members } from "./pages/Members";
 import { Billing } from "./pages/Billing";
 import { Invitations } from "./pages/Invitations";
 import { AppShell } from "./components/AppShell";
+import { PageLoading } from "./components/PageLoading";
 
 export function App() {
+  const { state } = useAuth();
+  // The topbar only shows on auth pages (login/signup/accept-invite) —
+  // AppShell hides it via :has(). Brand-link destination depends on
+  // whether the visitor is logged in: authed → dashboard; anon → /preview
+  // (the public showcase). Pointing anon visitors at "/" used to bounce
+  // them back to /login via RequireAuth — a no-op trap.
+  const brandHref = state.status === "authenticated" ? "/" : "/preview";
+
   return (
     <div className="shell">
       {/* Minimal topbar — just the brand. Hidden on AppShell pages
@@ -18,7 +27,7 @@ export function App() {
        * The old SystemStatus clock + duplicate auth nav + footer are
        * gone — they didn't earn their real estate. */}
       <header className="topbar">
-        <Link to="/" className="brand">
+        <Link to={brandHref} className="brand">
           <span className="dot" aria-hidden />
           <span>Multitenant</span>
         </Link>
@@ -100,14 +109,14 @@ export function App() {
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
-  if (state.status === "loading") return <p className="loading">Resolving session</p>;
+  if (state.status === "loading") return <PageLoading label="Resolving session" />;
   if (state.status === "anonymous") return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RequireAnon({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
-  if (state.status === "loading") return <p className="loading">Resolving session</p>;
+  if (state.status === "loading") return <PageLoading label="Resolving session" />;
   if (state.status === "authenticated") return <Navigate to="/" replace />;
   return <>{children}</>;
 }

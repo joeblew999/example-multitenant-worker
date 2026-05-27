@@ -5,6 +5,7 @@ import { InvitationStatus, ScopeKind } from "../../gen/workers/invitation/v1/inv
 import { timestampMs } from "@bufbuild/protobuf/wkt";
 import { useAuth } from "../auth";
 import { authClient, errorMessage, invitationClient } from "../client";
+import { PageLoading } from "../components/PageLoading";
 
 type LoadState =
   | { kind: "loading" }
@@ -54,7 +55,7 @@ export function AcceptInvite() {
   if (load.kind === "loading") {
     return (
       <div className="page">
-        <p className="loading">Resolving invitation</p>
+        <PageLoading label="Resolving invitation" />
       </div>
     );
   }

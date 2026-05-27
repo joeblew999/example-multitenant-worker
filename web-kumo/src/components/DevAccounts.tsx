@@ -20,7 +20,7 @@
  */
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Badge, Banner, LayerCard, Text } from "@cloudflare/kumo";
 import { authClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
@@ -92,7 +92,7 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <p className="status-line">
-        Tester? <a href="/preview">View demo accounts →</a>
+        Tester? <Link to="/preview">View demo accounts →</Link>
       </p>
     );
   }
