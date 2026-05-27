@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { ToastProvider, TooltipProvider } from "@cloudflare/kumo";
 import { App } from "./App";
 import { AuthProvider } from "./auth";
 import "./styles.css";
@@ -12,7 +13,17 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        {/* Kumo providers — ToastProvider holds the toast queue;
+         * TooltipProvider gates the shared open-delay state for all
+         * Tooltips on the page. Overlay components (Dialog, Popover,
+         * DropdownMenu, CommandPalette) portal to document.body by
+         * default; only wrap in KumoPortalProvider if you need a
+         * custom container (Shadow DOM, etc.). */}
+        <TooltipProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </TooltipProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
