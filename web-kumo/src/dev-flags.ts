@@ -2,13 +2,12 @@
  * Dev-only feature flags. Single source of truth so multiple components
  * gate behind the same env var without drift.
  *
- * Set `VITE_SHOW_TEST_ACCOUNTS=false` in .env.production (or wherever
- * your build environment overrides Vite env) to hide the DevAccounts
- * card AND restore the production sign-out flow (-> /login).
+ * Set `VITE_SHOW_TEST_ACCOUNTS=false` in `.env.production` (or whatever
+ * your build env uses) to hide the DevAccounts card AND restore the
+ * production sign-out flow (→ /login). Default: visible.
+ *
+ * Env var type is declared in `vite-env.d.ts`.
  */
 
-export function devAccountsEnabled(): boolean {
-  const flag = (import.meta as { env?: { VITE_SHOW_TEST_ACCOUNTS?: string } }).env?.VITE_SHOW_TEST_ACCOUNTS;
-  if (flag === "false") return false;
-  return true;
-}
+export const devAccountsEnabled = (): boolean =>
+  import.meta.env.VITE_SHOW_TEST_ACCOUNTS !== "false";
