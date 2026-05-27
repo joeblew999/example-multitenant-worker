@@ -9,6 +9,7 @@ import {
   ListIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "../auth";
+import { devAccountsEnabled } from "../dev-flags";
 
 function MenuButton() {
   const { setOpenMobile, isMobile } = useSidebar();
@@ -43,6 +44,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { logout } = useAuth();
+
+  // On dev/demo builds (DevAccounts visible), bounce post-logout to
+  // /preview so the next sign-in is one tap away. On real production
+  // (test accounts hidden), fall through to the route guard's default
+  // anonymous redirect → /login.
+  const handleSignOut = () => {
+    logout();
+    if (devAccountsEnabled()) navigate("/preview", { replace: true });
+  };
 
   return (
     <Sidebar.Provider defaultOpen>
@@ -79,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <Sidebar.Footer>
             <Sidebar.Menu>
-              <Sidebar.MenuButton icon={SignOutIcon} onClick={logout}>
+              <Sidebar.MenuButton icon={SignOutIcon} onClick={handleSignOut}>
                 Sign out
               </Sidebar.MenuButton>
             </Sidebar.Menu>

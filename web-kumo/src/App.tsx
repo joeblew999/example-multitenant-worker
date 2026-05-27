@@ -10,7 +10,6 @@ import { Members } from "./pages/Members";
 import { Billing } from "./pages/Billing";
 import { Invitations } from "./pages/Invitations";
 import { AppShell } from "./components/AppShell";
-import { ThemeToggle } from "./components/ThemeToggle";
 
 export function App() {
   const { state, logout } = useAuth();
@@ -27,8 +26,6 @@ export function App() {
 
         <nav className="topnav">
           <SystemStatus />
-          <span className="sep" aria-hidden />
-          <ThemeToggle />
           <span className="sep" aria-hidden />
           {state.status === "authenticated" ? (
             <>

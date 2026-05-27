@@ -24,6 +24,7 @@ import { useNavigate } from "react-router-dom";
 import { Badge, Banner, LayerCard, Text } from "@cloudflare/kumo";
 import { authClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
+import { devAccountsEnabled } from "../dev-flags";
 
 const PASSWORD = "demo-password-123";
 
@@ -66,19 +67,13 @@ const ACCOUNTS: DemoAccount[] = [
   },
 ];
 
-function isEnabled(): boolean {
-  const flag = (import.meta as { env?: { VITE_SHOW_TEST_ACCOUNTS?: string } }).env?.VITE_SHOW_TEST_ACCOUNTS;
-  if (flag === "false") return false;
-  return true;
-}
-
 export function DevAccounts({ compact = false }: { compact?: boolean }) {
   const { setSession } = useAuth();
   const nav = useNavigate();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isEnabled()) return null;
+  if (!devAccountsEnabled()) return null;
 
   async function signInAs(acc: DemoAccount) {
     setBusy(acc.email);
