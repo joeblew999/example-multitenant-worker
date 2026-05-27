@@ -92,8 +92,9 @@ export function Preview() {
         <div className="mb-3">
           <Text as="h2" variant="heading2">Theme</Text>
           <p className="mt-1 text-kumo-subtle text-sm">
-            Live A/B switch between the editorial theme and Kumo's defaults.
-            Persists per-browser in <code className="font-mono">localStorage["wm.theme"]</code>.
+            Dev-only A/B switch between the editorial theme and Kumo's defaults.
+            Scoped to this page — navigating away resets to editorial. No persistence,
+            no URL param, no localStorage.
           </p>
         </div>
         <ThemeToggle />

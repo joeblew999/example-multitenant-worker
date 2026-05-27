@@ -1,35 +1,29 @@
 /**
- * Theme bootstrap. Runs at app boot from main.tsx so the chosen theme
- * is applied to <html> regardless of which page the user landed on.
+ * Theme contract for this app.
  *
- * Without this, only /preview (where <ThemeToggle> is mounted) would
- * restore the user's saved choice — every other page (login, dashboard,
- * etc.) would show whatever theme index.html declares by default.
+ *   Editorial is THE theme. Period.
  *
- * The ThemeToggle component reads + writes the same source of truth.
+ * Every page — login, signup, dashboard, members, billing, invitations —
+ * renders in editorial. That's declared statically by `<html data-theme=
+ * "editorial">` in index.html, so the theme is correct from the very
+ * first paint (no FOUC, no JS dependency).
+ *
+ * The `kumo` and `fedramp` themes exist ONLY as a dev-time A/B tool on
+ * the /preview showcase, to confirm that components we lift from Kumo
+ * still look right when someone re-themes them. The <ThemeToggle> there
+ * mutates the <html data-theme> attribute LIVE for the duration of the
+ * Preview page, then resets to "editorial" on unmount. No localStorage,
+ * no URL param, no persistence — so navigating away always lands you
+ * back in editorial, and the toggle can't bleed into another tab or
+ * confuse the next page load.
  */
-
-const STORAGE_KEY = "wm.theme";
 
 export const THEMES = ["editorial", "kumo", "fedramp"] as const;
 export type Theme = (typeof THEMES)[number];
 
-export const THEME_STORAGE_KEY = STORAGE_KEY;
+export const DEFAULT_THEME: Theme = "editorial";
 
-function isTheme(v: unknown): v is Theme {
-  return typeof v === "string" && (THEMES as readonly string[]).includes(v);
-}
-
-/** URL `?theme=` wins; then localStorage; default `editorial`. */
-export function readInitialTheme(): Theme {
-  const fromUrl = new URLSearchParams(window.location.search).get("theme");
-  if (isTheme(fromUrl)) return fromUrl;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (isTheme(stored)) return stored;
-  return "editorial";
-}
-
-export function applyTheme(theme: Theme): void {
+/** Live-mutate the <html data-theme> attribute. No persistence. */
+export function setHtmlTheme(theme: Theme): void {
   document.documentElement.setAttribute("data-theme", theme);
-  localStorage.setItem(STORAGE_KEY, theme);
 }
