@@ -1,68 +1,203 @@
-// A no-auth sandbox page that demos the Kumo AppShell + Orange theme.
-// Used during development to visually verify the floor without standing
-// up the worker. Remove or guard for dev-only once the real pages migrate.
+// Component showcase for theme stress-testing.
+//
+// Renders every Kumo primitive we expect to use on real pages, so we can
+// flip themes via the ThemeToggle and visually audit token coverage in
+// one place. If a page later adds a component that's not on this list,
+// add it here too — the showcase is the source of truth for "what the
+// editorial theme must handle."
 
-import { Badge, Breadcrumbs, Button, LayerCard, Text } from "@cloudflare/kumo";
+import { useState } from "react";
+import {
+  Badge,
+  Banner,
+  Breadcrumbs,
+  Button,
+  Checkbox,
+  Empty,
+  Field,
+  Input,
+  Label,
+  LayerCard,
+  Loader,
+  Pagination,
+  Radio,
+  RadioGroup,
+  Select,
+  SkeletonLine,
+  Switch,
+  Table,
+  Tabs,
+  Text,
+  Textarea,
+} from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
 
-export function Preview() {
+const BADGE_COLORS = [
+  "orange",
+  "red",
+  "purple",
+  "green",
+  "teal",
+  "blue",
+  "neutral",
+  "info",
+] as const;
+
+const BANNER_VARIANTS = ["default", "info", "warning", "danger", "success"] as const;
+
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        breadcrumbs={
-          <Breadcrumbs>
-            <Breadcrumbs.Link href="/">Home</Breadcrumbs.Link>
-            <Breadcrumbs.Separator />
-            <Breadcrumbs.Current>Preview</Breadcrumbs.Current>
-          </Breadcrumbs>
-        }
-        title="Kumo + Cloudflare Orange"
-        description="Phase 1 floor — Tailwind v4, Kumo styles, Orange brand mark. PageHeader source lives at src/components/kumo/page-header/ thanks to `kumo add`."
-      />
-
-      <div className="flex items-center gap-3">
-        <Badge variant="orange">Phase 1</Badge>
-        <Badge variant="info">cedar branch</Badge>
-        <Badge variant="neutral">3 blocks installed</Badge>
+    <LayerCard className="p-6">
+      <div className="mb-4">
+        <Text as="h2" variant="heading2">{title}</Text>
+        {hint && <p className="mt-1 text-kumo-subtle text-sm">{hint}</p>}
       </div>
+      <div className="flex flex-col gap-4">{children}</div>
+    </LayerCard>
+  );
+}
 
-      <LayerCard className="p-6">
-        <div className="flex flex-col gap-4">
-          <Text as="h2" variant="heading2">Brand color check</Text>
-          <div className="flex items-center gap-3">
-            <span className="size-8 rounded bg-kumo-brand" />
-            <span className="font-mono text-kumo-subtle">
-              bg-kumo-brand · #f6821f
-            </span>
-          </div>
-          <div className="flex gap-3">
-            <Button>Primary action</Button>
+export function Preview() {
+  const [tab, setTab] = useState("alpha");
+  const [radio, setRadio] = useState("two");
+  const [select, setSelect] = useState("eu-west");
+  const [check, setCheck] = useState(true);
+  const [sw, setSw] = useState(true);
+
+  return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          breadcrumbs={
+            <Breadcrumbs>
+              <Breadcrumbs.Link href="/">Home</Breadcrumbs.Link>
+              <Breadcrumbs.Separator />
+              <Breadcrumbs.Current>Preview</Breadcrumbs.Current>
+            </Breadcrumbs>
+          }
+          title="Theme showcase"
+          description="Every Kumo primitive we use on real pages, in one place. Flip themes via the toggle in the top-right and watch what breaks."
+        />
+
+        <Section title="Buttons" hint="All variants. Primary uses --color-kumo-brand; destructive uses --color-kumo-danger.">
+          <div className="flex flex-wrap gap-3">
+            <Button>Primary</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="destructive">Destructive</Button>
+            <Button disabled>Disabled</Button>
           </div>
-        </div>
-      </LayerCard>
+        </Section>
 
-      <LayerCard className="p-6">
-        <div className="mb-3">
-          <Text as="h2" variant="heading2">Blocks installed via `kumo add`</Text>
-        </div>
-        <ul className="list-disc space-y-1 pl-5 text-kumo-default">
-          <li>
-            <code className="font-mono text-kumo-subtle">PageHeader</code> —
-            in use above (this title bar)
-          </li>
-          <li>
-            <code className="font-mono text-kumo-subtle">ResourceListPage</code> —
-            ready for org / member / billing list pages
-          </li>
-          <li>
-            <code className="font-mono text-kumo-subtle">DeleteResource</code> —
-            ready for destructive confirmation flows
-          </li>
-        </ul>
-      </LayerCard>
-    </div>
+        <Section title="Badges" hint="Filled (top) and subtle (bottom). Subtle variants are tints; useful for status pills.">
+          <div className="flex flex-wrap gap-2">
+            {BADGE_COLORS.map((c) => (
+              <Badge key={c} variant={c as never}>{c}</Badge>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="Banners" hint="Five intent variants — each should read clearly without surface bleed.">
+          {BANNER_VARIANTS.map((v) => (
+            <Banner key={v} variant={v as never}>
+              <Text variant="body">
+                <b>{v}</b> — the quick brown fox jumps over the lazy dog.
+              </Text>
+            </Banner>
+          ))}
+        </Section>
+
+        <Section title="Form controls" hint="Field + Label + Input + Textarea + Select + Checkbox + Radio + Switch.">
+          <Field>
+            <Label>Email</Label>
+            <Input type="email" placeholder="you@example.com" />
+          </Field>
+          <Field>
+            <Label>Notes</Label>
+            <Textarea placeholder="Multi-line input…" rows={3} />
+          </Field>
+          <Field>
+            <Label>Region</Label>
+            <Select value={select} onValueChange={(v) => setSelect(String(v))}>
+              <Select.Trigger />
+              <Select.Content>
+                <Select.Item value="us-east">US East</Select.Item>
+                <Select.Item value="eu-west">EU West</Select.Item>
+                <Select.Item value="ap-south">AP South</Select.Item>
+              </Select.Content>
+            </Select>
+          </Field>
+          <div className="flex items-center gap-4">
+            <Checkbox checked={check} onCheckedChange={(v) => setCheck(Boolean(v))}>
+              Send me updates
+            </Checkbox>
+            <Switch checked={sw} onCheckedChange={setSw}>
+              Notifications
+            </Switch>
+          </div>
+          <RadioGroup value={radio} onValueChange={(v) => setRadio(String(v))}>
+            <Radio value="one">Option one</Radio>
+            <Radio value="two">Option two</Radio>
+            <Radio value="three">Option three</Radio>
+          </RadioGroup>
+        </Section>
+
+        <Section title="Tabs" hint="Tab list + content area. Active indicator uses --color-kumo-brand or --color-kumo-line.">
+          <Tabs
+            selectedValue={tab}
+            onValueChange={(v) => setTab(String(v))}
+            tabs={[
+              { value: "alpha", label: "Alpha" },
+              { value: "beta", label: "Beta" },
+              { value: "gamma", label: "Gamma" },
+            ]}
+          />
+          <p className="text-kumo-subtle">Selected: {tab}</p>
+        </Section>
+
+        <Section title="Table" hint="Header row + body rows + Badge in cell.">
+          <Table>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Name</Table.Head>
+                <Table.Head>Role</Table.Head>
+                <Table.Head>Status</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              <Table.Row>
+                <Table.Cell>demo@example.com</Table.Cell>
+                <Table.Cell>owner</Table.Cell>
+                <Table.Cell><Badge variant={"green" as never}>active</Badge></Table.Cell>
+              </Table.Row>
+              <Table.Row>
+                <Table.Cell>alice@acme.io</Table.Cell>
+                <Table.Cell>member</Table.Cell>
+                <Table.Cell><Badge variant={"neutral" as never}>invited</Badge></Table.Cell>
+              </Table.Row>
+              <Table.Row>
+                <Table.Cell>bob@partner.dev</Table.Cell>
+                <Table.Cell>member</Table.Cell>
+                <Table.Cell><Badge variant={"red" as never}>revoked</Badge></Table.Cell>
+              </Table.Row>
+            </Table.Body>
+          </Table>
+          <Pagination total={42} pageSize={10} currentPage={2} onPageChange={() => {}} />
+        </Section>
+
+        <Section title="Loading + empty states" hint="Loader, SkeletonLine, Empty.">
+          <div className="flex items-center gap-6">
+            <Loader />
+            <div className="flex-1 flex flex-col gap-2">
+              <SkeletonLine />
+              <SkeletonLine className="w-3/4" />
+              <SkeletonLine className="w-1/2" />
+            </div>
+          </div>
+          <Empty
+            title="No results"
+            description="No matches found. Try a different filter or come back later."
+          />
+        </Section>
+      </div>
   );
 }

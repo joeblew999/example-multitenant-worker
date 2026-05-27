@@ -1,0 +1,67 @@
+/* Hand-authored overrides that complement the generated theme-editorial.css.
+ *
+ * The token generator only emits CSS custom properties. These selectors
+ * are too specific for the token system — they reset Kumo elements that
+ * inherit unwanted styling from legacy-styles.css, or set typography
+ * Kumo doesn't expose as a token.
+ */
+
+/* legacy-styles.css applies `button { background: var(--text-display) }`
+ * globally — that gives Login its white-pill primary look. But Kumo's
+ * Sidebar.MenuButton is a <button> too, so without scoping every nav
+ * item becomes a primary pill (= every link looks selected). Reset only
+ * sidebar buttons; scoped to the editorial theme so flipping back to
+ * default kumo/fedramp restores normal styling. */
+[data-theme="editorial"] button[data-sidebar="menu-button"],
+[data-theme="editorial"] button[data-sidebar="menu-sub-button"],
+[data-theme="editorial"] button[data-sidebar="menu-action"],
+[data-theme="editorial"] button[data-sidebar="trigger"] {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+[data-theme="editorial"] button[data-sidebar="menu-button"][data-active="true"] {
+  background: var(--accent);
+  color: var(--text-display);
+}
+[data-theme="editorial"] button[data-sidebar="menu-button"]:hover:not([data-active="true"]) {
+  background: var(--surface-raised);
+  opacity: 1;
+}
+
+/* Same global-button conflict as the sidebar: Kumo's Button component
+ * renders a <button> with `bg-kumo-*` utility classes (e.g. bg-kumo-base
+ * for primary, bg-kumo-fill for secondary). The legacy `button` rule
+ * sets background to white, hiding all variant differences. Detect Kumo
+ * buttons by their `shrink-0` utility (legacy buttons don't use Tailwind
+ * flex utilities) and clear the legacy paint so Kumo's variant classes
+ * win. */
+[data-theme="editorial"] button.shrink-0 {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  min-height: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Kumo's PageHeader title uses font-heading (resolves to body font).
+ * Use the editorial display font (Doto) so page titles like "Members"
+ * match Login's "Log in." hero display. Not a token — Kumo doesn't
+ * expose font-family as themable. */
+[data-theme="editorial"] h1.font-heading {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-display);
+}

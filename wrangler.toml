@@ -14,9 +14,9 @@ command = "cargo install -q \"worker-build@^0.8\" && worker-build --release"
 # lives under `./migrations`.
 [[d1_databases]]
 binding = "DB"
-database_name = "workers-multitenant"
+database_name = "workers-multitenant-cedar"
 migrations_dir = "migrations"
-database_id = "d9f8742e-0e85-4c23-a15e-5b4fb003a45f"
+database_id = "79047974-e389-43ec-be67-fb8d704379f1"
 
 # Static SPA bundle for the sign-up / login management UI. On the `cedar`
 # branch we serve the Kumo + Cloudflare Orange variant from `./web-kumo`.

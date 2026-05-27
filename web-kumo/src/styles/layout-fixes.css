@@ -1,0 +1,84 @@
+/* web-kumo-only layout fixes that extend legacy-styles.css.
+ *
+ * legacy-styles.css is byte-identical with example-multitenant-worker/web/
+ * — the canonical editorial source. web/ has only 4 pages (no sidebar),
+ * so `.shell { max-width: 1080px }` works there. web-kumo adds AppShell
+ * (sidebar + main content) which needs the full viewport.
+ *
+ * These rules are theme-agnostic (apply under editorial/kumo/fedramp).
+ */
+
+/* When a page mounts an AppShell (Kumo's Sidebar wrapper has this class),
+ * lift the 1080px constraint and zero the shell padding so AppShell's own
+ * <main className="p-6"> handles spacing. */
+.shell:has(.group\/sidebar-wrapper) {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+.shell:has(.group\/sidebar-wrapper) > .topbar {
+  padding-left: var(--space-xl);
+  padding-right: var(--space-xl);
+  margin-bottom: 0;
+}
+
+/* Topbar wrap on narrow viewports. The legacy @media (max-width: 720px)
+ * block already adds flex-wrap, but with the ThemeToggle in the nav we
+ * also need the nav itself to wrap and rows to break gracefully. */
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; row-gap: var(--space-md); }
+  .topnav { flex-wrap: wrap; row-gap: var(--space-sm); justify-content: flex-end; }
+  .topnav .sep { display: none; }
+  .topnav a { font-size: var(--caption); }
+}
+
+/* Even narrower (true mobile): topnav stacks under the brand. */
+@media (max-width: 480px) {
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .topnav { width: 100%; justify-content: flex-start; }
+}
+
+/* Mobile sidebar overlay (Kumo Sidebar's <768px sheet mode).
+ *
+ * Three fixes:
+ *   1. Kumo renders the dialog with z-index: auto, so it falls behind the
+ *      legacy topbar. Lift to a layer above the chrome.
+ *   2. --sidebar-width on mobile is narrow (~9rem) and reads as a thin
+ *      strip; widen to a usable sheet on small viewports.
+ *   3. The dialog bg uses --color-kumo-base which in editorial mode is
+ *      surface-raised, very close to the page surface. Add a right
+ *      border + page-dim so the sheet visually separates.
+ */
+[role="dialog"]:has([data-sidebar="content"]) {
+  z-index: 60;
+  /* Don't force width — let Kumo's --sidebar-width drive it. Forcing
+   * width breaks the slide-in transform calc. Just override the var
+   * itself so width stays bound to it. */
+  --sidebar-width: min(80vw, 280px);
+  border-right: 1px solid var(--border-visible);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Kumo emits a fixed-inset backdrop sibling with bg-black/50. It has no
+ * explicit z-index, so the legacy topbar peeks through. Bump it just
+ * below the dialog. */
+[data-sidebar-backdrop] { z-index: 55; }
+
+/* The MenuButton uses a plain <button>, so legacy-styles.css paints it
+ * as a white pill. We want it as a ghost-style trigger that hugs the
+ * page surface. */
+button[aria-label="Open menu"] {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-visible);
+  min-height: 0;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+button[aria-label="Open menu"]:hover {
+  border-color: var(--text-display);
+  color: var(--text-display);
+  opacity: 1;
+}

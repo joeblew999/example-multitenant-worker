@@ -13,6 +13,15 @@
 @import "tailwindcss";
 @import "@cloudflare/kumo/styles";
 @import "./legacy-styles.css";
+@import "./styles/theme-editorial.css";
+@import "./styles/theme-editorial-extras.css";
+@import "./styles/layout-fixes.css";
+
+/* Tailwind v4 only scans source files for utility-class names. Kumo's
+ * components (Badge, Banner, Table, etc.) bake class strings into their
+ * compiled JS in node_modules — without this @source line Tailwind
+ * skips them and rules like .bg-kumo-badge-orange never get emitted. */
+@source "../node_modules/@cloudflare/kumo/dist";
 
 html, body, #root {
   height: 100%;

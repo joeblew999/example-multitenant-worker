@@ -1,0 +1,52 @@
+/**
+ * AUTO-GENERATED — do not edit directly.
+ *
+ * Source:    scripts/theme-generator/config.editorial.mjs
+ * Generator: scripts/theme-generator/generate.mjs
+ * Regen:     mise run kumo:theme-gen   (or pnpm theme:gen)
+ *
+ * Structurally mirrors Kumo's theme-fedramp.css (single @layer base
+ * block scoped to [data-theme="editorial"]). Values reference vars
+ * from legacy-styles.css which handles light/dark via prefers-color-scheme.
+ */
+
+@layer base {
+  [data-theme="editorial"] {
+    /* Text colors */
+    --text-color-kumo-default: var(--text-primary);
+    --text-color-kumo-strong: var(--text-display);
+    --text-color-kumo-subtle: var(--text-secondary);
+    --text-color-kumo-inactive: var(--text-disabled);
+    --text-color-kumo-placeholder: var(--text-disabled);
+    --text-color-kumo-brand: var(--accent);
+    --text-color-kumo-link: var(--accent);
+
+    /* Surfaces, borders, brand, status */
+    --color-kumo-canvas: var(--surface);
+    --color-kumo-elevated: var(--surface-raised);
+    --color-kumo-recessed: var(--surface);
+    --color-kumo-base: var(--surface-raised);
+    --color-kumo-tint: var(--surface-raised);
+    --color-kumo-overlay: var(--surface-raised);
+    --color-kumo-control: var(--surface-raised);
+    --color-kumo-fill: var(--surface-raised);
+    --color-kumo-fill-hover: var(--border);
+    --color-kumo-interact: var(--border-visible);
+    --color-kumo-contrast: var(--text-display);
+    --color-kumo-line: var(--border);
+    --color-kumo-hairline: var(--border-visible);
+    --color-kumo-focus: var(--accent);
+    --color-kumo-brand: var(--accent);
+    --color-kumo-brand-hover: var(--accent);
+    --color-kumo-shadow-edge: transparent;
+    --color-kumo-shadow-drop: transparent;
+    --color-kumo-info: oklch(70% 0.10 240);
+    --color-kumo-info-tint: oklch(70% 0.10 240);
+    --color-kumo-success: oklch(70% 0.13 150);
+    --color-kumo-success-tint: oklch(70% 0.13 150);
+    --color-kumo-warning: oklch(80% 0.16 80);
+    --color-kumo-warning-tint: oklch(80% 0.16 80);
+    --color-kumo-danger: var(--accent);
+    --color-kumo-danger-tint: var(--accent);
+  }
+}

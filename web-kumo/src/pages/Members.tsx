@@ -1,8 +1,46 @@
-import { Badge, Banner, Breadcrumbs, Button, Text } from "@cloudflare/kumo";
+import {
+  Badge,
+  Banner,
+  Breadcrumbs,
+  Empty,
+  Table,
+  Text,
+} from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
-import { ResourceListPage } from "../components/kumo/resource-list/resource-list";
+import { useAuth } from "../auth";
+
+function roleBadge(role: string) {
+  const v = role === "ROLE_OWNER" ? "orange" : "neutral";
+  const label = role === "ROLE_OWNER" ? "owner" : "member";
+  return <Badge variant={v as never}>{label}</Badge>;
+}
 
 export function Members() {
+  const { state } = useAuth();
+  if (state.status !== "authenticated") return null;
+  const { whoami } = state;
+
+  type Row = {
+    kind: "Billing" | "Org";
+    scopeId: string;
+    displayName: string;
+    role: string;
+  };
+  const rows: Row[] = [
+    ...whoami.billingMemberships.map((m) => ({
+      kind: "Billing" as const,
+      scopeId: m.scopeId,
+      displayName: m.displayName,
+      role: m.role,
+    })),
+    ...whoami.orgMemberships.map((m) => ({
+      kind: "Org" as const,
+      scopeId: m.scopeId,
+      displayName: m.displayName,
+      role: m.role,
+    })),
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -14,36 +52,49 @@ export function Members() {
           </Breadcrumbs>
         }
         title="Members"
-        description="Users with access to the current scope (billing account or organization)."
+        description="Your memberships across billing and org scopes. The full per-scope member list lands with Cedar + whoami:permissions (ROADMAP item 4)."
       />
 
-      <Banner variant="default">
+      <Banner variant={"info" as never}>
         <Text variant="body">
-          Backend wiring lands with ROADMAP item 4
-          (<code className="font-mono">whoami:permissions</code>) and the
-          Cedar middleware. Until then this page is a layout placeholder.
+          Showing data from the <code className="font-mono">whoami</code>{" "}
+          session — your own scope memberships. There isn't yet a{" "}
+          <code className="font-mono">ListMembers</code> RPC to enumerate
+          others in each scope; that's gated behind the Cedar middleware
+          rollout.
         </Text>
       </Banner>
 
-      <ResourceListPage
-        title="People"
-        description="Members of this scope, with their roles and last-seen times."
-      >
-        <div className="py-12 text-center text-kumo-subtle">
-          <Text variant="body">
-            No members loaded. Members are owners or members of the active
-            billing/org scope; the data comes from{" "}
-            <code className="font-mono">OrgService.ListMembers</code> /{" "}
-            <code className="font-mono">BillingService.ListMembers</code>.
-          </Text>
-          <div className="mt-6 flex justify-center gap-3">
-            <Button>Invite member</Button>
-            <Button variant="secondary">
-              <Badge variant="neutral">soon</Badge>
-            </Button>
-          </div>
-        </div>
-      </ResourceListPage>
+      {rows.length === 0 ? (
+        <Empty title="No memberships" description="You don't belong to any billing or org scope." />
+      ) : (
+        <Table>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Scope</Table.Head>
+              <Table.Head>Kind</Table.Head>
+              <Table.Head>Your role</Table.Head>
+              <Table.Head>ID</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {rows.map((r) => (
+              <Table.Row key={`${r.kind}-${r.scopeId}`}>
+                <Table.Cell>{r.displayName}</Table.Cell>
+                <Table.Cell>
+                  <Badge variant={(r.kind === "Billing" ? "blue" : "purple") as never}>
+                    {r.kind}
+                  </Badge>
+                </Table.Cell>
+                <Table.Cell>{roleBadge(r.role)}</Table.Cell>
+                <Table.Cell>
+                  <code className="text-xs font-mono text-kumo-subtle">{r.scopeId}</code>
+                </Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      )}
     </div>
   );
 }
