@@ -4,7 +4,12 @@ import { BrowserRouter } from "react-router-dom";
 import { ToastProvider, TooltipProvider } from "@cloudflare/kumo";
 import { App } from "./App";
 import { AuthProvider } from "./auth";
+import { applyTheme, readInitialTheme } from "./theme";
 import "./styles.css";
+
+// Apply the saved theme BEFORE React mounts so every page (not just
+// /preview where ThemeToggle lives) reflects the user's choice.
+applyTheme(readInitialTheme());
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

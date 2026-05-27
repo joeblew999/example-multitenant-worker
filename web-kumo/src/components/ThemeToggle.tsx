@@ -1,31 +1,11 @@
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "wm.theme";
-const THEMES = ["editorial", "kumo", "fedramp"] as const;
-type Theme = (typeof THEMES)[number];
-
-function isTheme(v: unknown): v is Theme {
-  return typeof v === "string" && (THEMES as readonly string[]).includes(v);
-}
-
-function readInitial(): Theme {
-  const fromUrl = new URLSearchParams(window.location.search).get("theme");
-  if (isTheme(fromUrl)) return fromUrl;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (isTheme(stored)) return stored;
-  return "editorial";
-}
-
-function apply(theme: Theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-}
+import { applyTheme, readInitialTheme, THEMES, type Theme } from "../theme";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(readInitial);
+  const [theme, setTheme] = useState<Theme>(readInitialTheme);
 
   useEffect(() => {
-    apply(theme);
-    localStorage.setItem(STORAGE_KEY, theme);
+    applyTheme(theme);
   }, [theme]);
 
   return (
