@@ -5,6 +5,7 @@ import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { Dashboard } from "./pages/Dashboard";
 import { AcceptInvite } from "./pages/AcceptInvite";
+import { Preview } from "./pages/Preview";
 import { AppShell } from "./components/AppShell";
 
 export function App() {
@@ -64,6 +65,14 @@ export function App() {
             }
           />
           <Route path="/invite/:token" element={<AcceptInvite />} />
+          <Route
+            path="/preview"
+            element={
+              <AppShell>
+                <Preview />
+              </AppShell>
+            }
+          />
           <Route
             path="/"
             element={

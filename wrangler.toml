@@ -3,7 +3,11 @@ main = "build/index.js"
 compatibility_date = "2026-04-22"
 
 [build]
-command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
+# Dropped --panic-unwind on the `cedar` branch: after bumping wasm-bindgen
+# 0.2.118 -> 0.2.122 to satisfy worker-build's minimum, wasm-streams 0.5
+# fails RefUnwindSafe checks under panic=unwind. panic=abort is fine for
+# local dev (worker just restarts on panic).
+command = "cargo install -q \"worker-build@^0.8\" && worker-build --release"
 
 # Single shared D1 binding. The schema (users, identities, billing accounts,
 # orgs, memberships, invitations, consumed nonces, sso configs, subscriptions)
@@ -14,12 +18,13 @@ database_name = "workers-multitenant"
 migrations_dir = "migrations"
 database_id = "d9f8742e-0e85-4c23-a15e-5b4fb003a45f"
 
-# Static SPA bundle for the sign-up / login management UI. The Vite build in
-# `./web` writes to `./web/dist`. SPA fallback returns index.html for unknown
-# paths so React Router can take over; the explicit `run_worker_first` paths
-# (ConnectRPC services + non-RPC HTTP routes) always hit the Worker instead.
+# Static SPA bundle for the sign-up / login management UI. On the `cedar`
+# branch we serve the Kumo + Cloudflare Orange variant from `./web-kumo`.
+# The original `./web` is preserved as a visual baseline.
+# SPA fallback returns index.html for unknown paths so React Router can
+# take over; `run_worker_first` paths always hit the Worker instead.
 [assets]
-directory = "./web/dist"
+directory = "./web-kumo/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = [
