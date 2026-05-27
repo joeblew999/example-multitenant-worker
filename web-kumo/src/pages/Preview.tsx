@@ -40,11 +40,18 @@ import { PageHeader } from "../components/kumo/page-header/page-header";
 import { DevAccounts } from "../components/DevAccounts";
 import { ThemeToggle } from "../components/ThemeToggle";
 
+// Kumo Badge has both color-only variants (red/green/orange/etc.) and
+// semantic variants (primary/secondary/success/etc.). Showcase the
+// color ones — semantic ones are covered implicitly by status badges
+// in the Table section.
 const BADGE_COLORS = [
   "orange", "red", "purple", "green", "teal", "blue", "neutral", "info",
 ] as const;
 
-const BANNER_VARIANTS = ["default", "info", "warning", "danger", "success"] as const;
+// Real Kumo Banner variants — only three. info/warning/danger/success
+// silently fall back to default. The intent-color tints they used to
+// imply now come from the Toast/Badge/Banner system more directly.
+const BANNER_VARIANTS = ["default", "alert", "error"] as const;
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -131,7 +138,7 @@ export function Preview() {
       <Section title="Badges" hint="Color set + status pills.">
         <div className="flex flex-wrap gap-2">
           {BADGE_COLORS.map((c) => (
-            <Badge key={c} variant={c as never}>{c}</Badge>
+            <Badge key={c} variant={c}>{c}</Badge>
           ))}
         </div>
       </Section>
@@ -139,7 +146,7 @@ export function Preview() {
       {/* ── Banners ── */}
       <Section title="Banners" hint="Intent variants — each should read distinctly.">
         {BANNER_VARIANTS.map((v) => (
-          <Banner key={v} variant={v as never}>
+          <Banner key={v} variant={v}>
             <Text variant="body">
               <b>{v}</b> — the quick brown fox jumps over the lazy dog.
             </Text>
@@ -251,17 +258,17 @@ export function Preview() {
             <Table.Row>
               <Table.Cell>demo@example.com</Table.Cell>
               <Table.Cell>owner</Table.Cell>
-              <Table.Cell><Badge variant={"green" as never}>active</Badge></Table.Cell>
+              <Table.Cell><Badge variant="green">active</Badge></Table.Cell>
             </Table.Row>
             <Table.Row>
               <Table.Cell>alice@acme.example</Table.Cell>
               <Table.Cell>member</Table.Cell>
-              <Table.Cell><Badge variant={"neutral" as never}>invited</Badge></Table.Cell>
+              <Table.Cell><Badge variant="neutral">invited</Badge></Table.Cell>
             </Table.Row>
             <Table.Row>
               <Table.Cell>bob@partner.example</Table.Cell>
               <Table.Cell>member</Table.Cell>
-              <Table.Cell><Badge variant={"red" as never}>revoked</Badge></Table.Cell>
+              <Table.Cell><Badge variant="red">revoked</Badge></Table.Cell>
             </Table.Row>
           </Table.Body>
         </Table>
@@ -281,7 +288,7 @@ export function Preview() {
       <Section title="Surface" hint="Themed bg+border containers (color: primary | secondary). Surface is a deprecated wrapper around LayerCard — kept here for completeness.">
         <div className="grid grid-cols-2 gap-3">
           {(["primary", "secondary"] as const).map((c) => (
-            <Surface key={c} color={c as never} className="p-4 rounded-lg ring ring-kumo-line">
+            <Surface key={c} color={c} className="p-4 rounded-lg ring ring-kumo-line">
               <Text variant="body">color="{c}"</Text>
             </Surface>
           ))}

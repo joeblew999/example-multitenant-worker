@@ -107,7 +107,7 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
         </p>
       </div>
 
-      {error && <Banner variant={"danger" as never}>{error}</Banner>}
+      {error && <Banner variant="error">{error}</Banner>}
 
       <div className="flex flex-col gap-3">
         {ACCOUNTS.map((acc) => (
@@ -117,7 +117,7 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <Badge variant={acc.badge as never}>{acc.label}</Badge>
+                <Badge variant={acc.badge}>{acc.label}</Badge>
               </div>
               <div className="text-kumo-default font-mono text-sm truncate">{acc.email}</div>
               <p className="text-kumo-subtle text-sm mt-1">{acc.scenario}</p>

@@ -16,15 +16,15 @@ import { SubscriptionStatus } from "../../gen/workers/billing/v1/billing_pb.js";
 function statusBadge(s: SubscriptionStatus) {
   switch (s) {
     case SubscriptionStatus.ACTIVE:
-      return <Badge variant={"green" as never}>active</Badge>;
+      return <Badge variant="green">active</Badge>;
     case SubscriptionStatus.PAST_DUE:
-      return <Badge variant={"orange" as never}>past due</Badge>;
+      return <Badge variant="orange">past due</Badge>;
     case SubscriptionStatus.CANCELED:
-      return <Badge variant={"red" as never}>canceled</Badge>;
+      return <Badge variant="red">canceled</Badge>;
     case SubscriptionStatus.NONE:
-      return <Badge variant={"neutral" as never}>none</Badge>;
+      return <Badge variant="neutral">none</Badge>;
     default:
-      return <Badge variant={"neutral" as never}>unknown</Badge>;
+      return <Badge variant="neutral">unknown</Badge>;
   }
 }
 
@@ -71,7 +71,7 @@ export function Billing() {
         description="Billing accounts you own or belong to. Each personal sign-up mints one; orgs nest beneath them."
       />
 
-      {error && <Banner variant={"danger" as never}>{error}</Banner>}
+      {error && <Banner variant="error">{error}</Banner>}
 
       {accounts === null && !error && (
         <Empty title="Loading…" description="Fetching from BillingService.ListBillingAccounts." />
@@ -82,7 +82,7 @@ export function Billing() {
           <Text as="h2" variant="heading2">Current subscription</Text>
           <div className="flex items-center gap-4 flex-wrap">
             <span className="text-kumo-subtle">Plan</span>
-            <Badge variant={"neutral" as never}>{sub.plan || "—"}</Badge>
+            <Badge variant="neutral">{sub.plan || "—"}</Badge>
             <span className="text-kumo-subtle">Status</span>
             {statusBadge(sub.status)}
           </div>
@@ -113,7 +113,7 @@ export function Billing() {
                   </div>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant={(a.personal ? "neutral" : "blue") as never}>
+                  <Badge variant={a.personal ? "neutral" : "blue"}>
                     {a.personal ? "personal" : "shared"}
                   </Badge>
                 </Table.Cell>
@@ -122,7 +122,7 @@ export function Billing() {
                 </Table.Cell>
                 <Table.Cell>
                   {a.sso ? (
-                    <Badge variant={"green" as never}>configured</Badge>
+                    <Badge variant="green">configured</Badge>
                   ) : (
                     <span className="text-kumo-subtle">—</span>
                   )}

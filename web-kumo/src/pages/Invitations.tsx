@@ -31,17 +31,17 @@ const ROLE_LABEL: Record<Role, string> = {
 function statusBadge(s: InvitationStatus) {
   switch (s) {
     case InvitationStatus.PENDING:
-      return <Badge variant={"orange" as never}>pending</Badge>;
+      return <Badge variant="orange">pending</Badge>;
     case InvitationStatus.ACCEPTED:
-      return <Badge variant={"green" as never}>accepted</Badge>;
+      return <Badge variant="green">accepted</Badge>;
     case InvitationStatus.DECLINED:
-      return <Badge variant={"neutral" as never}>declined</Badge>;
+      return <Badge variant="neutral">declined</Badge>;
     case InvitationStatus.REVOKED:
-      return <Badge variant={"red" as never}>revoked</Badge>;
+      return <Badge variant="red">revoked</Badge>;
     case InvitationStatus.EXPIRED:
-      return <Badge variant={"neutral" as never}>expired</Badge>;
+      return <Badge variant="neutral">expired</Badge>;
     default:
-      return <Badge variant={"neutral" as never}>unknown</Badge>;
+      return <Badge variant="neutral">unknown</Badge>;
   }
 }
 
@@ -89,7 +89,7 @@ export function Invitations() {
         description="Pending invites where you're the invitee. Accept/decline happens via the link in your invitation email."
       />
 
-      {error && <Banner variant={"danger" as never}>{error}</Banner>}
+      {error && <Banner variant="error">{error}</Banner>}
 
       {invites === null && !error && (
         <Empty
@@ -134,7 +134,7 @@ export function Invitations() {
         </Table>
       )}
 
-      <Banner variant={"info" as never}>
+      <Banner variant="default">
         <Text variant="body">
           To accept or decline, follow the link from your invitation email.
           That flow lives at <code className="font-mono">/invite/:token</code>{" "}

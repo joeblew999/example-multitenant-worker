@@ -12,7 +12,7 @@ import { Role } from "../../gen/workers/auth/v1/auth_pb.js";
 
 function roleBadge(role: Role) {
   const isOwner = role === Role.OWNER;
-  return <Badge variant={(isOwner ? "orange" : "neutral") as never}>{isOwner ? "owner" : "member"}</Badge>;
+  return <Badge variant={isOwner ? "orange" : "neutral"}>{isOwner ? "owner" : "member"}</Badge>;
 }
 
 export function Members() {
@@ -55,7 +55,7 @@ export function Members() {
         description="Your memberships across billing and org scopes. The full per-scope member list lands with Cedar + whoami:permissions (ROADMAP item 4)."
       />
 
-      <Banner variant={"info" as never}>
+      <Banner variant="default">
         <Text variant="body">
           Showing data from the <code className="font-mono">whoami</code>{" "}
           session — your own scope memberships. There isn't yet a{" "}
@@ -82,7 +82,7 @@ export function Members() {
               <Table.Row key={`${r.kind}-${r.scopeId}`}>
                 <Table.Cell>{r.displayName}</Table.Cell>
                 <Table.Cell>
-                  <Badge variant={(r.kind === "Billing" ? "blue" : "purple") as never}>
+                  <Badge variant={r.kind === "Billing" ? "blue" : "purple"}>
                     {r.kind}
                   </Badge>
                 </Table.Cell>
