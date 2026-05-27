@@ -316,9 +316,10 @@ export function Preview() {
         <ul className="list-disc pl-5 text-kumo-subtle text-sm space-y-1">
           <li>
             <code className="font-mono">Dialog</code> / <code className="font-mono">Popover</code> / <code className="font-mono">DropdownMenu</code> /
-            <code className="font-mono">Tooltip</code> — Base UI compound primitives; need
-            <code className="font-mono">{"render={...}"}</code> pattern + portal positioning. Have
-            <code className="font-mono">KumoPortalProvider</code> mounted in main.tsx ready.
+            <code className="font-mono">Tooltip</code> — Base UI compound primitives using the
+            <code className="font-mono">{"render={...}"}</code> pattern. Overlays portal to
+            <code className="font-mono">document.body</code> by default;
+            <code className="font-mono">TooltipProvider</code> + <code className="font-mono">ToastProvider</code> are already mounted in <code className="font-mono">main.tsx</code>.
           </li>
           <li>
             <code className="font-mono">Combobox</code> / <code className="font-mono">Autocomplete</code> — full picker APIs

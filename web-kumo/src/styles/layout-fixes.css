@@ -90,16 +90,11 @@
   main.flex-1.p-6 { padding: 0.75rem; }
 
   /* (4) Topbar nav duplicates the sidebar's items on AppShell pages.
-   * Hide topnav links + ThemeToggle. Sidebar covers nav; theme switch
-   * is a dev-only toy that doesn't need viewport real estate on phones.
-   * REUSABLE WHEN: [editorial] + [Kumo Sidebar].
-   * Note: ThemeToggle uses inline `style={{ display: "inline-flex" }}`
-   * which beats CSS via cascade. We're in the editorial layer (last),
-   * but inline styles beat ALL layers. !important is the only fix. */
+   * Hide the duplicated links on mobile — sidebar covers nav.
+   * REUSABLE WHEN: [editorial] + [Kumo Sidebar]. */
   .shell:has(.group\/sidebar-wrapper) .topnav a,
-  .shell:has(.group\/sidebar-wrapper) .topnav button,
-  .shell:has(.group\/sidebar-wrapper) .topnav > div[role="group"] {
-    display: none !important;
+  .shell:has(.group\/sidebar-wrapper) .topnav button {
+    display: none;
   }
 
   /* (5) Section header + right-side meta stack instead of crashing.
