@@ -6,6 +6,9 @@ import { Signup } from "./pages/Signup";
 import { Dashboard } from "./pages/Dashboard";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { Preview } from "./pages/Preview";
+import { Members } from "./pages/Members";
+import { Billing } from "./pages/Billing";
+import { Invitations } from "./pages/Invitations";
 import { AppShell } from "./components/AppShell";
 
 export function App() {
@@ -79,6 +82,36 @@ export function App() {
               <RequireAuth>
                 <AppShell>
                   <Dashboard />
+                </AppShell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/members"
+            element={
+              <RequireAuth>
+                <AppShell>
+                  <Members />
+                </AppShell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <RequireAuth>
+                <AppShell>
+                  <Billing />
+                </AppShell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/invitations"
+            element={
+              <RequireAuth>
+                <AppShell>
+                  <Invitations />
                 </AppShell>
               </RequireAuth>
             }

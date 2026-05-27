@@ -1,14 +1,24 @@
 import { useState } from "react";
 import type { MembershipSummary } from "../../gen/workers/auth/v1/auth_pb.js";
 import { AuthMethodKind, Role } from "../../gen/workers/auth/v1/auth_pb.js";
+import {
+  Badge,
+  Banner,
+  Breadcrumbs,
+  Button,
+  LayerCard,
+  Table,
+  Text,
+} from "@cloudflare/kumo";
+import { PageHeader } from "../components/kumo/page-header/page-header";
+import { useAuth } from "../auth";
+import { authClient, errorMessage } from "../client";
 
 const roleLabel: Record<Role, string> = {
   [Role.OWNER]: "owner",
   [Role.MEMBER]: "member",
   [Role.UNSPECIFIED]: "unknown",
 };
-import { useAuth } from "../auth";
-import { authClient, errorMessage } from "../client";
 
 export function Dashboard() {
   const { state, setSession, refreshWhoami } = useAuth();
@@ -38,86 +48,75 @@ export function Dashboard() {
     }
   }
 
-  return (
-    <div className="page">
-      <section className="hero">
-        <span className="eyebrow">Current scope · {currentScopeKind}</span>
-        <h1 className="display">{currentScopeName}</h1>
-        <p className="lede">
-          Operating as <strong>{whoami.email}</strong> with role{" "}
-          <span className="chip active">{roleLabel[whoami.role]}</span>. Switch scopes below — every pivot
-          mints a fresh, narrowly-scoped session token.
-        </p>
-      </section>
+  const authMethodLabel =
+    whoami.authMethod?.kind === AuthMethodKind.SSO
+      ? `sso${whoami.authMethod.idpId ? `:${whoami.authMethod.idpId}` : ""}`
+      : "password";
 
-      <section>
-        <div className="section-head">
-          <h2>Account</h2>
-          <button
-            type="button"
-            className="ghost"
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumbs.Link href="/">Home</Breadcrumbs.Link>
+            <Breadcrumbs.Separator />
+            <Breadcrumbs.Current>Dashboard</Breadcrumbs.Current>
+          </Breadcrumbs>
+        }
+        title={currentScopeName}
+        description={`${currentScopeKind} · Operating as ${whoami.email} with role ${roleLabel[whoami.role]}. Switch scopes below — every pivot mints a fresh, narrowly-scoped session token.`}
+      />
+
+      {error && (
+        <Banner variant="error">
+          <span>{error}</span>
+        </Banner>
+      )}
+
+      <LayerCard className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <Text as="h2" variant="heading2">Account</Text>
+          <Button
+            variant="ghost"
             onClick={() => {
               refreshWhoami().catch((e) => setError(errorMessage(e, "refresh failed")));
             }}
           >
             Refresh
-          </button>
+          </Button>
         </div>
 
-        {error && (
-          <p className="status-line error" style={{ marginBottom: 16 }}>
-            {error}
-          </p>
-        )}
-
-        <dl className="kv">
-          <div className="row">
-            <dt>User ID</dt>
-            <dd>
-              <span className="mono">{whoami.userId}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Email</dt>
-            <dd>
-              {whoami.email}
-              {!whoami.emailVerified && <span className="secondary"> · unverified</span>}
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Auth method</dt>
-            <dd>
-              <span className="chip">
-                {whoami.authMethod?.kind === AuthMethodKind.SSO
-                  ? `sso${whoami.authMethod.idpId ? `:${whoami.authMethod.idpId}` : ""}`
-                  : "password"}
-              </span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Active role</dt>
-            <dd>
-              <span className="chip active">{roleLabel[whoami.role]}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Billing scope</dt>
-            <dd>
-              <span className="mono">{whoami.billingAccountId}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Org scope</dt>
-            <dd>
-              {whoami.orgId ? (
-                <span className="mono">{whoami.orgId}</span>
+        <KvList
+          rows={[
+            { k: "User ID", v: <span className="font-mono text-kumo-default">{whoami.userId}</span> },
+            {
+              k: "Email",
+              v: (
+                <span>
+                  {whoami.email}
+                  {!whoami.emailVerified && (
+                    <span className="ml-2 text-kumo-subtle">· unverified</span>
+                  )}
+                </span>
+              ),
+            },
+            { k: "Auth method", v: <Badge variant="neutral">{authMethodLabel}</Badge> },
+            { k: "Active role", v: <Badge variant="orange">{roleLabel[whoami.role]}</Badge> },
+            {
+              k: "Billing scope",
+              v: <span className="font-mono text-kumo-default">{whoami.billingAccountId}</span>,
+            },
+            {
+              k: "Org scope",
+              v: whoami.orgId ? (
+                <span className="font-mono text-kumo-default">{whoami.orgId}</span>
               ) : (
-                <span className="secondary">— operating at billing scope</span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      </section>
+                <span className="text-kumo-subtle">— operating at billing scope</span>
+              ),
+            },
+          ]}
+        />
+      </LayerCard>
 
       <Memberships
         title="Billing accounts"
@@ -142,6 +141,31 @@ export function Dashboard() {
   );
 }
 
+function KvList({ rows }: { rows: { k: string; v: React.ReactNode }[] }) {
+  return (
+    <dl className="grid grid-cols-[minmax(140px,200px)_1fr] gap-x-6">
+      {rows.map(({ k, v }, i) => (
+        <div key={k} className={`contents`}>
+          <dt
+            className={`py-3 text-sm uppercase tracking-wider text-kumo-subtle ${
+              i > 0 ? "border-t border-kumo-line" : ""
+            }`}
+          >
+            {k}
+          </dt>
+          <dd
+            className={`py-3 text-kumo-default ${
+              i > 0 ? "border-t border-kumo-line" : ""
+            }`}
+          >
+            {v}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 type MembershipsProps = {
   title: string;
   subtitle: string;
@@ -162,46 +186,68 @@ function Memberships({
   keyPrefix,
 }: MembershipsProps) {
   return (
-    <section>
-      <div className="section-head">
-        <h2>{title}</h2>
-        <span className="meta">
+    <LayerCard className="p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <Text as="h2" variant="heading2">{title}</Text>
+        <span className="font-mono text-sm text-kumo-subtle">
           {items.length.toString().padStart(2, "0")} ·{" "}
           {items.length === 1 ? "membership" : "memberships"}
         </span>
       </div>
-      <p className="section-sub">{subtitle}</p>
+      <Text variant="secondary">{subtitle}</Text>
 
-      {items.length === 0 ? (
-        <div className="list-empty">No memberships</div>
-      ) : (
-        <ul className="list">
-          {items.map((m) => {
-            const k = `${keyPrefix}:${m.scopeId}`;
-            const current = m.scopeId === currentScopeId;
-            return (
-              <li key={m.scopeId} className={current ? "is-current" : undefined}>
-                <div className="body">
-                  <span className="name">{m.displayName || m.scopeId}</span>
-                  <span className="meta">
-                    <span className="role">{m.role}</span>
-                    <span className="id">{m.scopeId}</span>
-                    {current && <span className="live">Active</span>}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={current || busyId !== null}
-                  onClick={() => onSelect(m.scopeId)}
-                >
-                  {busyId === k ? "Switching…" : current ? "Active" : "Switch"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+      <div className="mt-4">
+        {items.length === 0 ? (
+          <div className="py-8 text-center text-kumo-subtle">No memberships</div>
+        ) : (
+          <Table>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Name</Table.Head>
+                <Table.Head>Role</Table.Head>
+                <Table.Head>ID</Table.Head>
+                <Table.Head>Status</Table.Head>
+                <Table.Head>{""}</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {items.map((m) => {
+                const k = `${keyPrefix}:${m.scopeId}`;
+                const current = m.scopeId === currentScopeId;
+                return (
+                  <Table.Row key={m.scopeId} variant={current ? "selected" : "default"}>
+                    <Table.Cell>
+                      <span className="font-medium text-kumo-strong">
+                        {m.displayName || m.scopeId}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge variant={m.role === Role.OWNER ? "orange" : "neutral"}>
+                        {roleLabel[m.role]}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="font-mono text-xs text-kumo-subtle">{m.scopeId}</span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      {current && <Badge variant="success">Active</Badge>}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Button
+                        variant="secondary"
+                        disabled={current || busyId !== null}
+                        onClick={() => onSelect(m.scopeId)}
+                      >
+                        {busyId === k ? "Switching…" : current ? "Active" : "Switch"}
+                      </Button>
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
+          </Table>
+        )}
+      </div>
+    </LayerCard>
   );
 }
