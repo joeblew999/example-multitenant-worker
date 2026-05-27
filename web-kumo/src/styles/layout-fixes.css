@@ -31,6 +31,19 @@
 }
 
 /* ============================================================
+ * Auth pages (login / signup / accept-invite) — vertically center
+ * content so login form doesn't sit at the top with a huge void
+ * between it and the footer. Only fires when AppShell ISN'T mounted.
+ * REUSABLE WHEN: [editorial] — relies on .shell wrapper + the page
+ * having a small flex element that doesn't grow.
+ * ============================================================ */
+.shell:not(:has(.group\/sidebar-wrapper)) > main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ============================================================
  * Topbar responsive layout (≤720px / ≤480px).
  * REUSABLE WHEN: [editorial] — needs .topbar + .topnav.
  * ============================================================ */
