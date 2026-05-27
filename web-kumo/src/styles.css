@@ -24,7 +24,18 @@
  * explicitly need to top all of it (sidebar reset, etc.).
  */
 
-@layer legacy, theme, base, components, utilities, editorial;
+/* Layer order (lowest precedence → highest):
+ *   theme       Kumo's @theme token definitions
+ *   base        Tailwind preflight reset (zeros padding/margin/border on *)
+ *   components  Component-class abstractions
+ *   legacy      Editorial design system (.shell, .topbar, .display, etc.) —
+ *               MUST be above `base` or the preflight `*{padding:0}` wins
+ *               over .shell's padding declaration.
+ *   utilities   Tailwind + Kumo utility classes — beat legacy so
+ *               Kumo's Button/Badge variants paint correctly.
+ *   editorial   Hand-authored selector overrides (sidebar reset, h1
+ *               Doto font, mobile layout fixes) — top precedence. */
+@layer theme, base, components, legacy, utilities, editorial;
 
 /* Per Kumo's AI usage guide (`mise run kumo:ai`):
  *   1. `@source` first — tells Tailwind to scan Kumo's compiled JS so
