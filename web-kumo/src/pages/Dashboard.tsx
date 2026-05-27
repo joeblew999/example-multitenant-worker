@@ -207,7 +207,6 @@ function Memberships({
                 <Table.Head>Role</Table.Head>
                 <Table.Head>ID</Table.Head>
                 <Table.Head>Status</Table.Head>
-                <Table.Head>{""}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -230,16 +229,17 @@ function Memberships({
                       <span className="font-mono text-xs text-kumo-subtle">{m.scopeId}</span>
                     </Table.Cell>
                     <Table.Cell>
-                      {current && <Badge variant="success">Active</Badge>}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Button
-                        variant="secondary"
-                        disabled={current || busyId !== null}
-                        onClick={() => onSelect(m.scopeId)}
-                      >
-                        {busyId === k ? "Switching…" : current ? "Active" : "Switch"}
-                      </Button>
+                      {current ? (
+                        <Badge variant="success">Active</Badge>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          disabled={busyId !== null}
+                          onClick={() => onSelect(m.scopeId)}
+                        >
+                          {busyId === k ? "Switching…" : "Switch"}
+                        </Button>
+                      )}
                     </Table.Cell>
                   </Table.Row>
                 );
