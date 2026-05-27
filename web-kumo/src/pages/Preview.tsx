@@ -2,23 +2,29 @@
 // Used during development to visually verify the floor without standing
 // up the worker. Remove or guard for dev-only once the real pages migrate.
 
-import { Badge, Button, LayerCard, Text } from "@cloudflare/kumo";
+import { Badge, Breadcrumbs, Button, LayerCard, Text } from "@cloudflare/kumo";
+import { PageHeader } from "../components/kumo/page-header/page-header";
 
 export function Preview() {
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <Text as="h1" variant="heading1">Kumo + Cloudflare Orange</Text>
-          <Text variant="secondary">
-            Phase 1 floor — Tailwind v4, Kumo styles, Orange brand mark.
-          </Text>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="orange">Phase 1</Badge>
-          <Badge variant="info">cedar branch</Badge>
-        </div>
-      </header>
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumbs.Link href="/">Home</Breadcrumbs.Link>
+            <Breadcrumbs.Separator />
+            <Breadcrumbs.Current>Preview</Breadcrumbs.Current>
+          </Breadcrumbs>
+        }
+        title="Kumo + Cloudflare Orange"
+        description="Phase 1 floor — Tailwind v4, Kumo styles, Orange brand mark. PageHeader source lives at src/components/kumo/page-header/ thanks to `kumo add`."
+      />
+
+      <div className="flex items-center gap-3">
+        <Badge variant="orange">Phase 1</Badge>
+        <Badge variant="info">cedar branch</Badge>
+        <Badge variant="neutral">3 blocks installed</Badge>
+      </div>
 
       <LayerCard className="p-6">
         <div className="flex flex-col gap-4">
@@ -33,18 +39,28 @@ export function Preview() {
             <Button>Primary action</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
+            <Button variant="destructive">Destructive</Button>
           </div>
         </div>
       </LayerCard>
 
       <LayerCard className="p-6">
         <div className="mb-3">
-          <Text as="h2" variant="heading2">What's next</Text>
+          <Text as="h2" variant="heading2">Blocks installed via `kumo add`</Text>
         </div>
         <ul className="list-disc space-y-1 pl-5 text-kumo-default">
-          <li>Phase 2: convert auth pages (Login, Signup, AcceptInvite)</li>
-          <li>Phase 3-4: convert org / billing / permissions pages</li>
-          <li>Phase 5: convert invitation flows</li>
+          <li>
+            <code className="font-mono text-kumo-subtle">PageHeader</code> —
+            in use above (this title bar)
+          </li>
+          <li>
+            <code className="font-mono text-kumo-subtle">ResourceListPage</code> —
+            ready for org / member / billing list pages
+          </li>
+          <li>
+            <code className="font-mono text-kumo-subtle">DeleteResource</code> —
+            ready for destructive confirmation flows
+          </li>
         </ul>
       </LayerCard>
     </div>
