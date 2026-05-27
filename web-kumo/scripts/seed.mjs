@@ -1,32 +1,30 @@
 #!/usr/bin/env node
 /**
- * Seed the local D1 with realistic data so the GUI has something to
- * render. Uses Connect RPC JSON over fetch — no SDK required.
+ * Seed the local D1 with realistic data so the GUI has volume to render.
  *
- * Creates:
- *   - alice@acme.io      (owner of an "Acme" org, owner of personal billing)
- *   - bob@acme.io        (member of Acme via accepted invite)
- *   - carol@partner.dev  (pending invite to Acme — never accepted)
- *   - dave@late.io       (pending invite — for "stale" demo)
+ * Scenario:
+ *   - alice owns 6 orgs under her billing account (Acme, Engineering,
+ *     Marketing, Sales, Operations + a deliberately long-named org)
+ *   - bob is a multi-role player: owner of one org, member of others
+ *   - carol is the "lots of pending invites" demo — 5 pending across
+ *     different orgs, different inviters
+ *   - 10+ minor users (eve/frank/grace/...) accept some invites, miss
+ *     others, populate org member lists
+ *   - one unicode user (für@müller.de) tests font rendering
+ *   - one long-domain user tests email-column truncation
  *
- * Outputs a manifest at .seed.json with sessionTokens for each user so
- * other scripts (or you) can log in as them via DevTools:
- *   localStorage.setItem('wm.session', JSON.stringify({
- *     token: ..., whoami: ...
- *   }))
+ * Outputs a manifest at .seed.json with sessionTokens for each user.
  *
  * Usage:
- *   mise run seed:dev               (default — :8787 wrangler)
- *   BASE=http://localhost:5175 node scripts/seed.mjs   (proxied via Vite)
+ *   mise run seed:dev               (local — :8787 wrangler)
+ *   mise run seed:prod              (deployed — reads URL from fnox)
+ *   BASE=https://... node scripts/seed.mjs
  *
- * Reset between runs by restarting the worker (in-memory D1 dev sim) or
- * `wrangler d1 execute DB --local --command "DELETE FROM users"`.
+ * Idempotent — re-running is safe; users/orgs are detected and reused.
  */
 
 import { writeFile } from "node:fs/promises";
 
-// Worker dev uses self-signed certs (wrangler --local-protocol=https).
-// Local-only script — fine to accept any cert.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 process.removeAllListeners("warning");
 
@@ -61,22 +59,14 @@ async function login(email) {
 
 async function ensureUser(email) {
   const existing = await login(email);
-  if (existing) {
-    console.log(`  ${email} — already exists, logged in`);
-    return existing;
-  }
-  console.log(`  signup ${email}`);
+  if (existing) return existing;
   const r = await rpc("auth.v1.AuthService", "Signup", { email, password: PASSWORD });
   return { email, token: r.sessionToken, whoami: r.whoami };
 }
 
 async function ensureUserWithInvite(email, inviteToken) {
   const existing = await login(email);
-  if (existing) {
-    console.log(`  ${email} — already exists, logged in (invite not consumed: already a member of relevant scopes)`);
-    return existing;
-  }
-  console.log(`  signup ${email} (accepting invite)`);
+  if (existing) return existing;
   const r = await rpc("auth.v1.AuthService", "Signup", {
     email, password: PASSWORD, inviteToken,
   });
@@ -85,18 +75,12 @@ async function ensureUserWithInvite(email, inviteToken) {
 
 async function ensureOrg(user, displayName) {
   const billingAccountId = user.whoami.billingAccountId;
-  // List orgs already under this billing scope; reuse if one already
-  // matches by name (idempotency).
   try {
     const list = await rpc("org.v1.OrgService", "ListOrganizations",
       { billingAccountId }, user.token);
     const hit = (list.organizations || []).find((o) => o.displayName === displayName && !o.personal);
-    if (hit) {
-      console.log(`  org "${displayName}" — already exists`);
-      return hit;
-    }
+    if (hit) return hit;
   } catch {}
-  console.log(`  create org "${displayName}" under billing ${billingAccountId.slice(0,12)}…`);
   const r = await rpc("org.v1.OrgService", "CreateOrganization",
     { billingAccountId, displayName }, user.token);
   return r.organization;
@@ -106,10 +90,8 @@ async function tryInviteToOrg(user, orgId, email, role = "ROLE_MEMBER") {
   try {
     const r = await rpc("org.v1.OrgService", "InviteMember",
       { orgId, email, role }, user.token);
-    console.log(`  invite ${email} to org ${orgId.slice(0,12)}… as ${role}`);
     return { invitationId: r.invitationId, token: r.inviteTokenForDemo };
-  } catch (e) {
-    console.log(`  invite ${email} to org — skipped (${e.message.slice(0, 60)})`);
+  } catch {
     return null;
   }
 }
@@ -118,48 +100,97 @@ async function tryInviteToBilling(user, billingAccountId, email, role = "ROLE_ME
   try {
     const r = await rpc("billing.v1.BillingService", "InviteMember",
       { billingAccountId, email, role }, user.token);
-    console.log(`  invite ${email} to billing ${billingAccountId.slice(0,12)}… as ${role}`);
     return { invitationId: r.invitationId, token: r.inviteTokenForDemo };
-  } catch (e) {
-    console.log(`  invite ${email} to billing — skipped (${e.message.slice(0, 60)})`);
+  } catch {
     return null;
   }
 }
 
+/** Invite + auto-accept by signup — for batch member-population. */
+async function inviteAndJoin(inviter, orgId, email) {
+  const existing = await login(email);
+  if (existing) return existing; // already exists, can't re-invite
+  const inv = await tryInviteToOrg(inviter, orgId, email);
+  if (!inv) return await ensureUser(email);
+  return await ensureUserWithInvite(email, inv.token);
+}
+
 async function main() {
   console.log(`[seed] base = ${BASE}`);
-
-  // Health check first so a clean error message beats a stack trace.
   const health = await fetch(`${BASE}/healthz`);
   if (!health.ok) throw new Error(`worker not reachable at ${BASE}/healthz`);
 
-  console.log("[seed] ensuring users");
+  // ──────────────────────────────────────────────────────────
+  // Core users
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] core users");
   const alice = await ensureUser("alice@acme.io");
   const carol = await ensureUser("carol@partner.dev");
-  const dave = await ensureUser("dave@late.io");
+  const dave  = await ensureUser("dave@late.io");
 
-  console.log("[seed] ensuring Acme org");
+  // ──────────────────────────────────────────────────────────
+  // Alice's portfolio of orgs
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] alice's orgs (6)");
   const acme = await ensureOrg(alice, "Acme");
+  const eng  = await ensureOrg(alice, "Engineering");
+  const mkt  = await ensureOrg(alice, "Marketing");
+  const sales = await ensureOrg(alice, "Sales");
+  const ops  = await ensureOrg(alice, "Operations");
+  const bigName = await ensureOrg(
+    alice,
+    "Org Name That Really Stretches Mobile Tables to Their Limit"
+  );
 
-  console.log("[seed] bob — invite + signup");
-  // On a fresh DB bob doesn't exist yet, so we need to invite-then-signup
-  // with the demo token. On re-run bob already exists, just log him in.
+  // ──────────────────────────────────────────────────────────
+  // Bob — multi-role: member of Acme + Eng, owner of Marketing
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] bob — multi-role");
   let bob = await login("bob@acme.io");
   if (!bob) {
-    const bobInvite = await tryInviteToOrg(alice, acme.id, "bob@acme.io");
-    if (bobInvite) {
-      bob = await ensureUserWithInvite("bob@acme.io", bobInvite.token);
-    } else {
-      bob = await ensureUser("bob@acme.io");
-    }
-  } else {
-    console.log(`  bob@acme.io — already exists, logged in`);
+    const inv = await tryInviteToOrg(alice, acme.id, "bob@acme.io");
+    bob = inv
+      ? await ensureUserWithInvite("bob@acme.io", inv.token)
+      : await ensureUser("bob@acme.io");
   }
+  await tryInviteToOrg(alice, eng.id, "bob@acme.io");
+  await tryInviteToOrg(alice, mkt.id, "bob@acme.io", "ROLE_OWNER");
 
-  console.log("[seed] pending invites (no-ops if they already exist)");
+  // ──────────────────────────────────────────────────────────
+  // Other org members (accept invites on signup)
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] org members (auto-accept on signup)");
+  await inviteAndJoin(alice, eng.id, "eve@design.studio");
+  await inviteAndJoin(alice, eng.id, "frank@engineering.team");
+  await inviteAndJoin(alice, mkt.id, "grace@marketing.io");
+  await inviteAndJoin(alice, sales.id, "henry@sales.team");
+  await inviteAndJoin(alice, sales.id, "ivy@a-rather-long-domain-name.example");
+  await inviteAndJoin(alice, ops.id, "jake@ops.io");
+  await inviteAndJoin(alice, ops.id, "kate@ops.io");
+  await inviteAndJoin(alice, bigName.id, "liam@team.io");
+
+  // Unicode display test (uses non-ASCII email local part)
+  await inviteAndJoin(alice, acme.id, "über@müller.de");
+
+  // ──────────────────────────────────────────────────────────
+  // Carol — the "lots of pending invites" demo user
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] carol — pending invites galore");
   await tryInviteToOrg(alice, acme.id, "carol@partner.dev");
+  await tryInviteToOrg(alice, eng.id, "carol@partner.dev");
+  await tryInviteToOrg(alice, sales.id, "carol@partner.dev");
+  await tryInviteToOrg(alice, ops.id, "carol@partner.dev");
+  await tryInviteToOrg(alice, bigName.id, "carol@partner.dev", "ROLE_OWNER");
+
+  // ──────────────────────────────────────────────────────────
+  // Dave — pending billing invite (left over from v1 demo)
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed] dave — pending billing invite");
   await tryInviteToBilling(alice, alice.whoami.billingAccountId, "dave@late.io", "ROLE_MEMBER");
 
+  // ──────────────────────────────────────────────────────────
+  // Manifest
+  // ──────────────────────────────────────────────────────────
   const manifest = {
     base: BASE,
     password: PASSWORD,
@@ -169,17 +200,24 @@ async function main() {
       carol: { email: carol.email, token: carol.token, whoami: carol.whoami },
       dave:  { email: dave.email,  token: dave.token,  whoami: dave.whoami },
     },
-    org: { id: acme.id, name: acme.displayName },
+    orgs: { acme: acme.id, engineering: eng.id, marketing: mkt.id, sales: sales.id, operations: ops.id, longName: bigName.id },
+    notes: {
+      "tour-as": {
+        alice: "/billing → 6 orgs visible; sees long-name overflow + scope-switcher density",
+        bob:   "/ → multi-role: member of Acme/Eng, owner of Marketing",
+        carol: "/invitations → 5 pending across different orgs (stresses Invitations table)",
+        dave:  "/invitations → 1 pending billing invite",
+      },
+    },
   };
   await writeFile(".seed.json", JSON.stringify(manifest, null, 2));
+
   console.log("\n[seed] done. .seed.json written.");
-  console.log("\nLogin as anyone via:");
-  console.log(`  email: <alice|bob|carol|dave>@…`);
-  console.log(`  password: ${PASSWORD}`);
-  console.log("\nOr drop their session into the browser:");
-  console.log(`  localStorage.setItem('wm.session', JSON.stringify({`);
-  console.log(`    token: '<token>', whoami: {…},`);
-  console.log(`  })); location.reload();`);
+  console.log(`Password: ${PASSWORD}`);
+  console.log("Tour the volume scenarios:");
+  for (const [u, note] of Object.entries(manifest.notes["tour-as"])) {
+    console.log(`  ${u}@…  →  ${note}`);
+  }
 }
 
 main().catch((err) => {

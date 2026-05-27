@@ -51,12 +51,15 @@
  * ============================================================ */
 @media (max-width: 720px) {
 
-  /* (1) Truncate long IDs to one line with ellipsis.
-   * REUSABLE WHEN: [universal] — any project rendering UUIDs/IDs in
-   * <span class="font-mono"> or <code class="font-mono">. */
-  code.font-mono,
-  span.font-mono,
-  code.text-xs.font-mono {
+  /* (1) Truncate long IDs to one line with ellipsis — INSIDE TABLE CELLS
+   * (<td>) and key-value definition lists (<dd>). Skips inline <code>
+   * in banners/paragraphs so prose stays readable.
+   * REUSABLE WHEN: [universal] — any project rendering IDs inside <td>
+   * or <dd>. */
+  td code.font-mono,
+  td span.font-mono,
+  dd code.font-mono,
+  dd span.font-mono {
     display: inline-block;
     max-width: 14ch;
     overflow: hidden;
