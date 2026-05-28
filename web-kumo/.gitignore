@@ -5,5 +5,6 @@ gen/
 *.tsbuildinfo
 *.log
 .DS_Store
-# Seed manifest contains live session tokens for seeded users — never commit.
-.seed.json
+# Seed manifests contain live session tokens for seeded users — never commit.
+# One per scenario: .seed.editorial.json, .seed.remysport.json, etc.
+.seed.*.json

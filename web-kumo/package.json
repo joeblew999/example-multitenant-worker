@@ -8,7 +8,7 @@
     "dev": "buf generate && vite",
     "dev:http": "buf generate && vite --config vite.config.http.ts",
     "theme:gen": "node scripts/theme-generator/generate.mjs",
-    "seed:dev": "node scripts/seed.mjs",
+    "seed:dev": "node scripts/seed/run.mjs",
     "build": "buf generate && tsc -b && vite build",
     "build:nocheck": "buf generate && vite build",
     "preview": "vite preview",

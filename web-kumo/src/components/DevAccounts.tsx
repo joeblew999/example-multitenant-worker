@@ -1,22 +1,23 @@
 /**
- * Click-to-sign-in panel for the 4 seeded demo accounts.
+ * Click-to-sign-in panel for the active seed scenario's demo accounts.
  *
- * Source-of-truth for the credentials is `scripts/seed.mjs` — when you
- * change the seed, update this hardcoded list to match.
+ * Source-of-truth is src/seed-scenarios/<active>.ts (chosen by
+ * `VITE_SEED_SCENARIO` env var). The backend seed (scripts/seed/
+ * scenario.<active>.mjs) must create matching users — the email
+ * strings on both sides have to stay in sync.
  *
  * ## Naming convention: all seed emails use the `.example` TLD
  *
  * Per RFC 6761 the `.example` TLD is permanently reserved for
- * documentation and never resolves on the public internet. So real
- * customers can NEVER collide with these test accounts, and devs can
- * log into prod as alice@acme.example to test without shadowing a real
- * user. Keep this convention if you add more demo accounts.
+ * documentation and never resolves on the public internet. Real
+ * customers can never collide with these test accounts, so devs can
+ * log into prod as alice@acme.example (or coach@bangkok-suns.example,
+ * etc.) without shadowing real users.
  *
  * ## Hidden by the VITE_SHOW_TEST_ACCOUNTS env var
  *
- *   - undefined / "true"  →  shown   (default for this demo deploy)
- *   - "false"             →  hidden  (set in .env.production when this
- *                                     stack is ported to a real project)
+ *   - undefined / "true"  →  shown   (default for demo deploys)
+ *   - "false"             →  hidden  (set in .env.production)
  */
 
 import { useState } from "react";
@@ -25,47 +26,7 @@ import { Badge, Banner, Button, LayerCard, Text } from "@cloudflare/kumo";
 import { authClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
 import { devAccountsEnabled } from "../dev-flags";
-
-const PASSWORD = "demo-password-123";
-
-interface DemoAccount {
-  email: string;
-  label: string;
-  scenario: string;
-  landAt: string;
-  badge: "orange" | "blue" | "purple" | "teal";
-}
-
-const ACCOUNTS: DemoAccount[] = [
-  {
-    email: "alice@acme.example",
-    label: "Alice (owner of 6 orgs)",
-    scenario: "Owns Acme + 5 other orgs; multi-org scope-switcher demo",
-    landAt: "/",
-    badge: "orange",
-  },
-  {
-    email: "bob@acme.example",
-    label: "Bob (multi-role)",
-    scenario: "Member of Acme/Engineering, owner of Marketing — mixed-role rows",
-    landAt: "/",
-    badge: "blue",
-  },
-  {
-    email: "carol@partner.example",
-    label: "Carol (5 pending invites)",
-    scenario: "Lots of pending invites across different orgs — invitations volume",
-    landAt: "/invitations",
-    badge: "purple",
-  },
-  {
-    email: "dave@late.example",
-    label: "Dave (pending billing invite)",
-    scenario: "One pending invite to alice's billing scope",
-    landAt: "/invitations",
-    badge: "teal",
-  },
-];
+import { ACTIVE_SCENARIO, type DemoAccount } from "../seed-scenarios";
 
 export function DevAccounts({ compact = false }: { compact?: boolean }) {
   const { setSession } = useAuth();
@@ -79,7 +40,10 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
     setBusy(acc.email);
     setError(null);
     try {
-      const res = await authClient.login({ email: acc.email, password: PASSWORD });
+      const res = await authClient.login({
+        email: acc.email,
+        password: ACTIVE_SCENARIO.password,
+      });
       if (!res.whoami) throw new Error("login response missing whoami");
       setSession(res.sessionToken, res.whoami);
       nav(acc.landAt, { replace: true });
@@ -105,15 +69,17 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
       <div className="mb-4">
         <Text as="h2" variant="heading2">Demo accounts</Text>
         <p className="mt-1 text-kumo-subtle text-sm">
+          Scenario:{" "}
+          <code className="font-mono">{ACTIVE_SCENARIO.name}</code>.
           Click any account to sign in. Shared password:{" "}
-          <code className="font-mono">{PASSWORD}</code>.
+          <code className="font-mono">{ACTIVE_SCENARIO.password}</code>.
         </p>
       </div>
 
       {error && <Banner variant="error">{error}</Banner>}
 
       <div className="flex flex-col gap-3">
-        {ACCOUNTS.map((acc) => (
+        {ACTIVE_SCENARIO.accounts.map((acc) => (
           <div
             key={acc.email}
             className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg ring ring-kumo-line"
@@ -138,11 +104,11 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
       </div>
 
       <p className="mt-4 text-kumo-subtle text-xs">
-        Emails use the <code className="font-mono">.example</code> TLD per RFC&nbsp;6761 —
-        guaranteed never to collide with real user emails, so the seed is safe to run against
-        production. Visible because <code className="font-mono">VITE_SHOW_TEST_ACCOUNTS</code> is
-        unset or "true"; set to "false" in <code className="font-mono">.env.production</code> to
-        hide on real deployments.
+        Switch demos by setting <code className="font-mono">VITE_SEED_SCENARIO</code> at
+        build time (e.g. <code className="font-mono">VITE_SEED_SCENARIO=remysport pnpm dev</code>).
+        That flips this list AND the canonical theme (via
+        <code className="font-mono"> index.html</code>'s
+        <code className="font-mono"> %VITE_SEED_SCENARIO%</code> substitution).
       </p>
     </LayerCard>
   );

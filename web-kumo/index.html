@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="editorial">
+<html lang="en" data-theme="%VITE_SEED_SCENARIO%">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,9 +7,12 @@
     <title>Multitenant // Account</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts for all scenarios. Editorial uses Doto + Space Grotesk + Space Mono;
+         RemySports uses Inter + Space Grotesk + IBM Plex Mono. Loading both sets
+         is ~30KB extra; not worth conditional-loading until it matters. -->
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap"
     />
   </head>
   <body>
