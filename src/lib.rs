@@ -29,7 +29,7 @@ pub mod time;
 
 use crate::auth::Keyring;
 use crate::billing::BillingProvider;
-use crate::middleware::AuthLayer;
+use crate::middleware::{AuthLayer, build_authorizer, shadow_layer};
 use crate::proto::workers::auth::v1::AuthServiceExt;
 use crate::proto::workers::billing::v1::BillingServiceExt;
 use crate::proto::workers::invitation::v1::InvitationServiceExt;
@@ -52,10 +52,19 @@ async fn fetch(
     let state = build_state(&env).await?;
     let auth_layer = AuthLayer::new(Arc::clone(&state.keyring), Arc::clone(&state.clock));
 
+    // CedarLayer in shadow mode: evaluates every request, logs the
+    // decision, never rejects. The hand-rolled `services::authz::require_*`
+    // helpers still enforce — they're the source of truth until shadow
+    // mode runs cleanly in prod for N days. See KUMO.md style of
+    // separation between the two layers in CLAUDE.md and the rollout
+    // plan in examples/multitenant-policies/ROADMAP.md.
+    let cedar_authorizer = build_authorizer();
+    let cedar_layer = shadow_layer::<worker::Body>(Arc::clone(&cedar_authorizer));
+
     let router = RpcRouter::new();
     let router = register_services(router, &state);
 
-    let mut svc = auth_layer.layer(ConnectRpcService::new(router));
+    let mut svc = auth_layer.layer(cedar_layer.layer(ConnectRpcService::new(router)));
     svc.call(req)
         .await
         .map_err(|e| worker::Error::RustError(format!("rpc dispatch: {e}")))

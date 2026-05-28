@@ -46,6 +46,14 @@ bytes = { version = "1.5", features = ["serde"] }
 futures = "0.3"
 tower = { version = "0.5", features = ["util"] }
 
+# Cedar policy authz middleware. Path-deps the connectrpc-cedar crate at
+# the outer repo root so any change here triggers a recompile of both.
+# Once connectrpc-cedar publishes to crates.io / a git tag, swap to that.
+cedar-policy = "4"
+connectrpc-cedar = { path = "../../" }
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+
 # `getrandom/js` is also needed for any non-libmacaroon dep that pulls in
 # OS RNG on wasm32 (uuid via `js`, password-hash for salts). We surface it
 # explicitly so a `cargo build --target wasm32-unknown-unknown` from the
