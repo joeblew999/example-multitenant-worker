@@ -15,26 +15,13 @@
  *   - Any theme-token assignment
  */
 
-/* legacy-styles.css applies `button { background: var(--text-display) }`
- * globally — that's Login's white-pill primary look. Kumo's Sidebar.MenuButton
- * is a <button> too, so we'd inherit the pill if we didn't reset it.
- * Editorial scope so flipping to default kumo/fedramp restores Kumo's nav. */
-[data-theme="editorial"] button[data-sidebar="menu-button"],
-[data-theme="editorial"] button[data-sidebar="menu-sub-button"],
-[data-theme="editorial"] button[data-sidebar="menu-action"],
-[data-theme="editorial"] button[data-sidebar="trigger"] {
-  background: transparent;
-  color: inherit;
-  border: 0;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  min-height: 0;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  letter-spacing: normal;
-  text-transform: none;
-}
+/* Editorial active state for Sidebar.MenuButton — red accent highlight
+ * matching the rest of the editorial palette. Kumo's default active
+ * state is a neutral tint; we override only in editorial scope so
+ * flipping to kumo/fedramp themes restores Kumo's native paint.
+ *
+ * Hover gets the raised-surface tint so non-active items have a clear
+ * affordance without competing with the active red. */
 [data-theme="editorial"] button[data-sidebar="menu-button"][data-active="true"] {
   background: var(--accent);
   color: var(--text-display);
@@ -44,16 +31,18 @@
   opacity: 1;
 }
 
-/* Strip the legacy white-pill chrome from Kumo Button instances (detect
- * by `shrink-0` — legacy buttons don't use flex utilities). The variant
- * paint itself comes from Kumo's own bg-kumo-* utility classes, which
- * now win automatically because we're in the `editorial` layer above
- * `utilities`... wait, no — we're LEAVING bg/color alone here so Kumo's
- * utility class paints them. Only kill the legacy chrome (border, etc.). */
+/* Editorial typography on Kumo Button instances (mono caps).
+ *
+ * Selector is the fragile bit: `button.shrink-0` matches Kumo Buttons
+ * because Kumo applies `shrink-0` to every Button — but it ALSO matches
+ * any other <button> with shrink-0 from Tailwind. Acceptable trade-off
+ * today because every <button> in our app is either a Kumo Button or
+ * uses `all: unset` (ThemeToggle). If you add a third-party button that
+ * happens to use shrink-0, this rule will hit it too.
+ *
+ * Kumo Button has no public data-* attribute we can target cleanly.
+ * If they add one (e.g. data-kumo-button), tighten this selector. */
 [data-theme="editorial"] button.shrink-0 {
-  border: 0;
-  min-height: 0;
-  padding: revert;
   font-family: var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;

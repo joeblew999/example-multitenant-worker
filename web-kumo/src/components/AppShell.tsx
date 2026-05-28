@@ -1,4 +1,4 @@
-import { Sidebar, useSidebar } from "@cloudflare/kumo";
+import { Button, Sidebar, useSidebar } from "@cloudflare/kumo";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   HouseIcon,
@@ -15,15 +15,16 @@ function MenuButton() {
   const { setOpenMobile, isMobile } = useSidebar();
   if (!isMobile) return null;
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="sm"
       onClick={() => setOpenMobile(true)}
       aria-label="Open menu"
-      className="md:hidden mb-4 inline-flex items-center gap-2"
+      className="md:hidden mb-4 shrink-0"
     >
-      <ListIcon size={20} />
-      <span className="font-mono text-sm uppercase tracking-wider">Menu</span>
-    </button>
+      <ListIcon size={16} />
+      Menu
+    </Button>
   );
 }
 

@@ -179,25 +179,6 @@
 .topbar { position: relative; z-index: 1; }
 [data-sidebar-backdrop] { z-index: 50; }
 
-/* ============================================================
- * MenuButton (mobile sidebar trigger) — ghost style not pill.
- * REUSABLE WHEN: [editorial] — relies on the legacy global `button`
- * rule that paints buttons as white pills, which we want to override
- * for this specific trigger. If your project doesn't have that legacy
- * rule, this selector is a no-op (still fine).
- * ============================================================ */
-button[aria-label="Open menu"] {
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border-visible);
-  min-height: 0;
-  padding: 0.5rem 0.75rem;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-}
-button[aria-label="Open menu"]:hover {
-  border-color: var(--text-display);
-  color: var(--text-display);
-  opacity: 1;
-}
+/* MenuButton (mobile sidebar trigger) is now a Kumo <Button variant="secondary">
+ * in AppShell.tsx — no per-selector override needed. Editorial mono+caps
+ * comes from theme-editorial-extras.css `button.shrink-0` rule. */
