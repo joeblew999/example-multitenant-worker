@@ -5,15 +5,8 @@
  * Generator: scripts/theme-generator/generate.mjs
  * Regen:     mise run kumo:theme-gen   (or pnpm theme:gen)
  *
- * UNLAYERED on purpose. Kumo emits an unlayered `:root, :host` rule
- * that sets every `--color-kumo-*` token to its Kumo-default value
- * (e.g. brand → blue via `light-dark(oklch(...), oklch(...))`). Per
- * the cascade-layers spec, unlayered rules ALWAYS beat layered ones
- * regardless of selector specificity — so wrapping our overrides in
- * `@layer base` made the editorial brand red silently lose to Kumo's
- * unlayered blue. Keeping these rules unlayered lets them tie on
- * layer (both none) and win on specificity + source order.
- *
+ * UNLAYERED on purpose — see generator header for why `@layer base`
+ * would let Kumo's unlayered `:root, :host` defaults silently win.
  * Values reference vars from legacy-styles.css which handles light/dark
  * via prefers-color-scheme.
  */
