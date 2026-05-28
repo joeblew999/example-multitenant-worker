@@ -2,35 +2,37 @@
 /**
  * Editorial theme — CSS generator.
  *
- * Reads ./config.editorial.mjs and emits src/styles/theme-editorial.css.
+ * Reads ./config.editorial.mjs and emits TWO CSS files:
+ *
+ *   1. src/styles/theme-editorial-palette.css
+ *      → :root vars (PALETTE.base + FONTS + SCALE) plus a
+ *        `@media (prefers-color-scheme: light)` override (PALETTE.light).
+ *        These are the vars every other CSS file references.
+ *
+ *   2. src/styles/theme-editorial.css
+ *      → `[data-theme="editorial"]` rules mapping Kumo's `--color-kumo-*`
+ *        tokens to the palette vars via `var(--...)`.
  *
  * ============================================================
  * Why this exists instead of calling Kumo's generator directly
  * ============================================================
  *
- * Kumo's `scripts/theme-generator/generate-css.ts` exports a
- * `generateThemeOverrideCSS(config, themeName)` function that does
- * almost exactly what this script does. We CANNOT use it from a
- * consumer project:
+ * Kumo's `scripts/theme-generator/generate-css.ts` has a clean
+ * `generateThemeOverrideCSS()` function but it's a Kumo-internal
+ * build helper, not a consumer API:
  *
  *   1. Kumo's `dist/scripts/theme-generator/generate-css.d.ts` ships
  *      only the type defs — there is no `generate-css.js` runtime.
  *   2. The package.json `exports` map only exposes
  *      `./scripts/theme-generator/{config,types}`. Deep imports past
- *      that fail under strict ESM resolution.
+ *      those fail under strict ESM resolution.
  *   3. Kumo invokes the generator via `tsx scripts/theme-generator/index.ts`
  *      from inside their own monorepo — that path is build-internal.
  *
- * So adding a new theme means hand-rolling a generator like this one.
- * If/when Kumo publishes the generator as part of their public API,
- * this file becomes a one-line wrapper around their function.
- *
- * What we DO use from Kumo: the typed `THEME_CONFIG` (for validating
- * that our token names aren't typos) and the `ThemeConfig`-family
- * types (via JSDoc) for editor support.
+ * So adding a custom theme means writing a generator like this one.
  *
  * ============================================================
- * Why the output is UNLAYERED (no @layer wrapper)
+ * Why the Kumo-mapping output is UNLAYERED (no @layer wrapper)
  * ============================================================
  *
  * Kumo's bundled CSS emits an unlayered `:root, :host` rule that sets
@@ -42,9 +44,9 @@
  * Kumo's own `generateThemeOverrideCSS` wraps overrides in
  * `@layer base { [data-theme="X"] { ... } }`. That means ANY theme
  * trying to override a token Kumo's `:root, :host` default sets will
- * silently lose. Verified by switching to `<html data-theme="fedramp">`
+ * silently lose. (Verified by switching to `<html data-theme="fedramp">`
  * in a stock Kumo dev server — `--color-kumo-brand` still paints
- * Kumo blue, not fedramp's intended color.
+ * Kumo blue, not fedramp's intended color.)
  *
  * We emit `[data-theme="editorial"] { ... }` unlayered so it ties
  * Kumo's `:root, :host` on layer (both none) and wins on specificity
@@ -56,35 +58,53 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { THEME_CONFIG as KUMO_CONFIG } from "@cloudflare/kumo/scripts/theme-generator/config";
-import { THEME_NAME, EDITORIAL_OVERRIDES } from "./config.editorial.mjs";
-
-/**
- * @typedef {import("@cloudflare/kumo/scripts/theme-generator/types").ThemeConfig} ThemeConfig
- * @typedef {import("@cloudflare/kumo/scripts/theme-generator/types").TokenDefinition} TokenDefinition
- * @typedef {import("@cloudflare/kumo/scripts/theme-generator/types").TextTokens} TextTokens
- * @typedef {import("@cloudflare/kumo/scripts/theme-generator/types").ColorTokens} ColorTokens
- */
+import {
+  EDITORIAL_OVERRIDES,
+  FONTS,
+  PALETTE,
+  SCALE,
+  THEME_NAME,
+} from "./config.editorial.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT_PATH = join(HERE, "..", "..", "src", "styles", "theme-editorial.css");
+const STYLES_DIR = join(HERE, "..", "..", "src", "styles");
+const PALETTE_OUT = join(STYLES_DIR, "theme-editorial-palette.css");
+const MAPPINGS_OUT = join(STYLES_DIR, "theme-editorial.css");
 
-const HEADER = `/**
+const PALETTE_HEADER = `/**
  * AUTO-GENERATED — do not edit directly.
  *
  * Source:    scripts/theme-generator/config.editorial.mjs
+ *            (PALETTE + FONTS + SCALE exports)
+ * Generator: scripts/theme-generator/generate.mjs
+ * Regen:     mise run kumo:theme-gen   (or pnpm theme:gen)
+ *
+ * Declares the editorial palette as CSS custom properties. Every other
+ * file in the stack (theme-editorial.css, theme-editorial-extras.css,
+ * layout-fixes.css, editorial-chrome.css) references these vars rather
+ * than inlining hex values, so the palette has a single source of
+ * truth in config.editorial.mjs.
+ */
+`;
+
+const MAPPINGS_HEADER = `/**
+ * AUTO-GENERATED — do not edit directly.
+ *
+ * Source:    scripts/theme-generator/config.editorial.mjs
+ *            (EDITORIAL_OVERRIDES export)
  * Generator: scripts/theme-generator/generate.mjs
  * Regen:     mise run kumo:theme-gen   (or pnpm theme:gen)
  *
  * UNLAYERED on purpose — see generator header for why \`@layer base\`
  * would let Kumo's unlayered \`:root, :host\` defaults silently win.
- * Values reference vars from legacy-styles.css which handles light/dark
- * via prefers-color-scheme.
+ * Maps Kumo's --color-kumo-* tokens to the editorial palette vars
+ * declared in theme-editorial-palette.css.
  */
 `;
 
 /**
- * Cross-check our token names against Kumo's THEME_CONFIG. Catches
- * typos and tokens that have been renamed/removed upstream.
+ * Cross-check our Kumo-mapping token names against Kumo's THEME_CONFIG.
+ * Catches typos and tokens that have been renamed/removed upstream.
  */
 function validate() {
   const warnings = [];
@@ -102,11 +122,51 @@ function validate() {
   }
 }
 
+// --- File 1: theme-editorial-palette.css -----------------------------
+
+/**
+ * @param {Record<string, string>} obj
+ * @param {string} indent
+ */
+function emitVars(obj, indent = "  ") {
+  return Object.entries(obj).map(([k, v]) => `${indent}--${k}: ${v};`);
+}
+
+function emitPaletteCSS() {
+  const lines = [PALETTE_HEADER, ":root {"];
+
+  lines.push(`  /* Colors (dark mode canonical) */`);
+  lines.push(...emitVars(PALETTE.base));
+  lines.push("");
+  lines.push(`  /* Typography */`);
+  lines.push(...emitVars(FONTS));
+  lines.push("");
+  lines.push(`  /* Scale — type, spacing, radii, motion */`);
+  lines.push(...emitVars(SCALE));
+  lines.push("");
+  lines.push(`  color-scheme: dark;`);
+  lines.push(`}`);
+  lines.push("");
+
+  if (Object.keys(PALETTE.light).length > 0) {
+    lines.push(`@media (prefers-color-scheme: light) {`);
+    lines.push(`  :root {`);
+    lines.push(...emitVars(PALETTE.light, "    "));
+    lines.push(`    color-scheme: light;`);
+    lines.push(`  }`);
+    lines.push(`}`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// --- File 2: theme-editorial.css (Kumo mappings) ---------------------
+
 /**
  * @param {"text" | "color"} group
  * @param {Record<string, { theme: Record<string, { light: string; dark: string }> }>} tokens
  * @param {string} prefix
- * @returns {string[]}
  */
 function emitGroup(group, tokens, prefix) {
   const lines = [];
@@ -118,8 +178,8 @@ function emitGroup(group, tokens, prefix) {
   return lines;
 }
 
-function emit() {
-  const lines = [HEADER, `[data-theme="${THEME_NAME}"] {`];
+function emitMappingsCSS() {
+  const lines = [MAPPINGS_HEADER, `[data-theme="${THEME_NAME}"] {`];
 
   const text = emitGroup("text", EDITORIAL_OVERRIDES.text, "text-color");
   const color = emitGroup("color", EDITORIAL_OVERRIDES.color, "color");
@@ -140,6 +200,10 @@ function emit() {
   return lines.join("\n");
 }
 
+// --- Main -----------------------------------------------------------
+
 validate();
-await writeFile(OUT_PATH, emit());
-console.log(`[theme:gen] wrote ${OUT_PATH}`);
+await writeFile(PALETTE_OUT, emitPaletteCSS());
+console.log(`[theme:gen] wrote ${PALETTE_OUT}`);
+await writeFile(MAPPINGS_OUT, emitMappingsCSS());
+console.log(`[theme:gen] wrote ${MAPPINGS_OUT}`);

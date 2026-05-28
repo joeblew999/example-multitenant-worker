@@ -2,13 +2,14 @@
  * AUTO-GENERATED — do not edit directly.
  *
  * Source:    scripts/theme-generator/config.editorial.mjs
+ *            (EDITORIAL_OVERRIDES export)
  * Generator: scripts/theme-generator/generate.mjs
  * Regen:     mise run kumo:theme-gen   (or pnpm theme:gen)
  *
  * UNLAYERED on purpose — see generator header for why `@layer base`
  * would let Kumo's unlayered `:root, :host` defaults silently win.
- * Values reference vars from legacy-styles.css which handles light/dark
- * via prefers-color-scheme.
+ * Maps Kumo's --color-kumo-* tokens to the editorial palette vars
+ * declared in theme-editorial-palette.css.
  */
 
 [data-theme="editorial"] {

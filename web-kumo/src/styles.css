@@ -1,4 +1,4 @@
-/* Tailwind v4 + Kumo (editorial theme by default; toggle in topnav).
+/* Tailwind v4 + Kumo (editorial theme).
  *
  * Kumo enforces semantic tokens only — `bg-kumo-base`, `text-kumo-brand`,
  * etc. Do not use raw Tailwind color classes for brand surfaces.
@@ -9,32 +9,27 @@
  * to layers declared LATER. We use this to make the stack composable
  * without specificity wars:
  *
- *   legacy   ← editorial design system (hand-rolled). Older, broadest.
- *   theme    ← Kumo's @theme tokens (via @cloudflare/kumo/styles).
- *   base     ← Kumo's base resets + theme-editorial token overrides.
- *   components
- *   utilities ← Tailwind + Kumo utility classes (bg-kumo-*, etc.).
- *   editorial ← our hand-authored selector overrides that need to win
- *               above utilities (sidebar reset, h1 Doto, etc.).
+ *   theme       — Kumo's @theme token definitions
+ *   base        — Tailwind preflight reset (zeros padding/margin/border on *)
+ *   components  — Component-class abstractions
+ *   legacy      — Editorial chrome (.shell, .topbar, .brand, .page) —
+ *                 MUST be above `base` or the preflight `*{padding:0}` wins
+ *                 over .shell's padding declaration.
+ *   utilities   — Tailwind + Kumo utility classes — beat legacy so
+ *                 Kumo's Button/Badge variants paint correctly.
+ *   editorial   — Hand-authored selector overrides (sidebar active red,
+ *                 h1 Doto font, mobile layout fixes) — top precedence.
  *
- * Order: `legacy < theme < base < components < utilities < editorial`.
- * That way Kumo's `bg-kumo-brand` utility naturally wins over the bare
- * `button { background: ... }` rule in legacy — no `!important`, no
- * compound-selector hacks. The editorial layer goes LAST for things we
- * explicitly need to top all of it (sidebar reset, etc.).
+ * Two CSS files are imported UNLAYERED on purpose:
+ *   • theme-editorial-palette.css — :root vars + light-mode override.
+ *     Unlayered because vars are inherited; layering doesn't affect
+ *     them and Kumo's :root sets the same level of specificity.
+ *   • theme-editorial.css — Kumo --color-kumo-* token mappings.
+ *     Unlayered because Kumo's `:root, :host` defaults are ALSO
+ *     unlayered; wrapping ours in a layer would silently lose. See
+ *     KUMO.md §3 for the full cascade-layer-trap explanation.
  */
 
-/* Layer order (lowest precedence → highest):
- *   theme       Kumo's @theme token definitions
- *   base        Tailwind preflight reset (zeros padding/margin/border on *)
- *   components  Component-class abstractions
- *   legacy      Editorial design system (.shell, .topbar, .display, etc.) —
- *               MUST be above `base` or the preflight `*{padding:0}` wins
- *               over .shell's padding declaration.
- *   utilities   Tailwind + Kumo utility classes — beat legacy so
- *               Kumo's Button/Badge variants paint correctly.
- *   editorial   Hand-authored selector overrides (sidebar reset, h1
- *               Doto font, mobile layout fixes) — top precedence. */
 @layer theme, base, components, legacy, utilities, editorial;
 
 /* Per Kumo's AI usage guide (`mise run kumo:ai`):
@@ -42,13 +37,25 @@
  *      utilities like .bg-kumo-badge-orange get emitted.
  *   2. `@cloudflare/kumo/styles` BEFORE `tailwindcss` so Kumo's @theme
  *      tokens register before Tailwind processes utilities.
- *   3. legacy + editorial layers afterwards. */
+ *   3. our palette + chrome + editorial layers afterwards. */
 @source "../node_modules/@cloudflare/kumo/dist";
 @import "@cloudflare/kumo/styles";
 @import "tailwindcss";
-@import "./legacy-styles.css" layer(legacy);
+
+/* Editorial palette source-of-truth → generated from
+   scripts/theme-generator/config.editorial.mjs. Unlayered (see header). */
+@import "./styles/theme-editorial-palette.css";
+
+/* Editorial chrome — base resets + .shell/.topbar/.brand/.page rules. */
+@import "./editorial-chrome.css" layer(legacy);
+
+/* Kumo --color-kumo-* mappings → generated, unlayered (see KUMO.md §3). */
 @import "./styles/theme-editorial.css";
+
+/* Editorial selector overrides (sidebar active red, h1 Doto, button caps). */
 @import "./styles/theme-editorial-extras.css" layer(editorial);
+
+/* Cross-theme layout fixes (mobile, AppShell, etc.). */
 @import "./styles/layout-fixes.css" layer(editorial);
 
 html, body, #root {
