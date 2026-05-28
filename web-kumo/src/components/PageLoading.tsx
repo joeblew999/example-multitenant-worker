@@ -4,9 +4,9 @@ import { Loader } from "@cloudflare/kumo";
  * Shared loading affordance for in-flight RPC fetches and route guards.
  *
  * Replaces two bad patterns we used to spray everywhere:
- *   - Bare <p className="loading">…</p>  →  looked like a 1999 page mid-load.
- *   - <Empty title="Loading…">           →  semantically wrong; Empty is
- *                                            for "no data here", not "fetching."
+ *   - Bare unstyled "Loading..." paragraphs that looked like a 1999 page.
+ *   - <Empty title="Loading…">  → semantically wrong; Empty is
+ *                                  for "no data here", not "fetching."
  *
  * Centers a Kumo Loader + optional label. Use it for any state where the
  * page can't render its content yet because data hasn't arrived.

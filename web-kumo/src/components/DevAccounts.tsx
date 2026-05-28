@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Badge, Banner, LayerCard, Text } from "@cloudflare/kumo";
+import { Badge, Banner, Button, LayerCard, Text } from "@cloudflare/kumo";
 import { authClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
 import { devAccountsEnabled } from "../dev-flags";
@@ -91,8 +91,11 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <p className="status-line">
-        Tester? <Link to="/preview">View demo accounts →</Link>
+      <p className="font-mono text-xs text-kumo-subtle m-0">
+        Tester?{" "}
+        <Link to="/preview" className="text-kumo-brand underline">
+          View demo accounts →
+        </Link>
       </p>
     );
   }
@@ -122,14 +125,14 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
               <div className="text-kumo-default font-mono text-sm truncate">{acc.email}</div>
               <p className="text-kumo-subtle text-sm mt-1">{acc.scenario}</p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => signInAs(acc)}
               disabled={busy !== null}
               className="shrink-0"
             >
               {busy === acc.email ? "Signing in…" : "Sign in"}
-            </button>
+            </Button>
           </div>
         ))}
       </div>
