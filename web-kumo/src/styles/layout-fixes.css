@@ -50,6 +50,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  /* gap between sibling blocks (e.g. the form .page card + the
+   * DevAccounts panel below it on /login). Without this they
+   * visually touch. */
+  gap: var(--space-2xl);
   padding: var(--space-xl) 0;
 }
 .shell:not(:has(.group\/sidebar-wrapper)) > main > .page {
