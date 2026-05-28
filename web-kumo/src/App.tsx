@@ -2,14 +2,10 @@ import { Navigate, Route, Routes, Link } from "react-router-dom";
 import { useAuth } from "./auth";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
-import { Dashboard } from "./pages/Dashboard";
 import { AcceptInvite } from "./pages/AcceptInvite";
-import { Preview } from "./pages/Preview";
-import { Members } from "./pages/Members";
-import { Billing } from "./pages/Billing";
-import { Invitations } from "./pages/Invitations";
 import { AppShell } from "./components/AppShell";
 import { PageLoading } from "./components/PageLoading";
+import { APP_ROUTES } from "./nav";
 
 export function App() {
   const { state } = useAuth();
@@ -35,6 +31,7 @@ export function App() {
 
       <main>
         <Routes>
+          {/* Auth pages — anonymous-only, no AppShell. */}
           <Route
             path="/login"
             element={
@@ -51,55 +48,28 @@ export function App() {
               </RequireAnon>
             }
           />
+          {/* Invitation accept page — usable while authed OR anon
+           * (anon visitors get a "Log in to accept" CTA). */}
           <Route path="/invite/:token" element={<AcceptInvite />} />
-          <Route
-            path="/preview"
-            element={
+
+          {/* AppShell routes — single source of truth in src/nav.tsx.
+           * Each entry decides for itself whether it needs RequireAuth
+           * via the `requireAuth` flag. */}
+          {APP_ROUTES.map(({ path, element: Page, requireAuth }) => {
+            const wrapped = (
               <AppShell>
-                <Preview />
+                <Page />
               </AppShell>
-            }
-          />
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <AppShell>
-                  <Dashboard />
-                </AppShell>
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/members"
-            element={
-              <RequireAuth>
-                <AppShell>
-                  <Members />
-                </AppShell>
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/billing"
-            element={
-              <RequireAuth>
-                <AppShell>
-                  <Billing />
-                </AppShell>
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/invitations"
-            element={
-              <RequireAuth>
-                <AppShell>
-                  <Invitations />
-                </AppShell>
-              </RequireAuth>
-            }
-          />
+            );
+            return (
+              <Route
+                key={path}
+                path={path}
+                element={requireAuth ? <RequireAuth>{wrapped}</RequireAuth> : wrapped}
+              />
+            );
+          })}
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

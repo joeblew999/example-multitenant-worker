@@ -1,15 +1,9 @@
 import { Button, Sidebar, useSidebar } from "@cloudflare/kumo";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import {
-  HouseIcon,
-  UsersIcon,
-  CreditCardIcon,
-  EnvelopeSimpleIcon,
-  SignOutIcon,
-  ListIcon,
-} from "@phosphor-icons/react";
+import { ListIcon, SignOutIcon } from "@phosphor-icons/react";
 import { useAuth } from "../auth";
 import { devAccountsEnabled } from "../dev-flags";
+import { visibleNavItems } from "../nav";
 
 function MenuButton() {
   const { setOpenMobile, isMobile } = useSidebar();
@@ -28,23 +22,16 @@ function MenuButton() {
   );
 }
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: typeof HouseIcon;
-}
-
-const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: HouseIcon },
-  { to: "/members", label: "Members", icon: UsersIcon },
-  { to: "/billing", label: "Billing", icon: CreditCardIcon },
-  { to: "/invitations", label: "Invitations", icon: EnvelopeSimpleIcon },
-];
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { logout } = useAuth();
+  const { state, logout } = useAuth();
+
+  // Pull whoami if we have it (will be null on /preview which is
+  // public). visibleNavItems handles the null case — returns only
+  // items with no visibility predicate.
+  const whoami = state.status === "authenticated" ? state.whoami : null;
+  const navItems = visibleNavItems(whoami);
 
   // On dev/demo builds (DevAccounts visible), bounce post-logout to
   // /preview so the next sign-in is one tap away. On real production
@@ -74,14 +61,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Sidebar.Group>
               <Sidebar.GroupLabel>Workspace</Sidebar.GroupLabel>
               <Sidebar.Menu>
-                {NAV.map((item) => (
+                {navItems.map((item) => (
                   <Sidebar.MenuButton
-                    key={item.to}
-                    icon={item.icon}
-                    active={pathname === item.to}
-                    onClick={() => navigate(item.to)}
+                    key={item.path}
+                    icon={item.nav!.icon}
+                    active={pathname === item.path}
+                    onClick={() => navigate(item.path)}
                   >
-                    {item.label}
+                    {item.nav!.label}
                   </Sidebar.MenuButton>
                 ))}
               </Sidebar.Menu>
