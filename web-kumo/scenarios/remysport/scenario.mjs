@@ -1,51 +1,67 @@
 /**
- * RemySports demo scenario — Bangkok Suns basketball club tenancy.
+ * RemySports / ChampsCircuit demo scenario — Thai basketball platform
+ * admin-GUI view.
  *
- * One file owns the entire scenario: theme, DevAccounts, backend seed.
- * See scenarios/editorial/scenario.mjs for the architecture rationale.
+ * Source data: joeblew999/remy-sport-biz/data/seed/*.csv (the product
+ * owner's fictional-but-realistic pilot dataset for Thailand basketball
+ * tournaments — Thai schools, federations, coaches, players).
  *
- * Domain mapping (data model → basketball):
- *   billing account  ←→  club / franchise (pays for the platform)
- *   organization     ←→  team within the club
- *   role             ←→  coach (OWNER) / player or staff (MEMBER)
+ * The remy-sport-biz repo defines a deep basketball domain (events,
+ * matches, brackets, venues, notifications, player positions, etc.).
+ * THIS demo only models the slice that fits the connectrpc-cedar
+ * admin-GUI scaffold: identity (users + roles) and tenancy (orgs +
+ * memberships + invitations). Match/event/venue data lives in a
+ * separate ChampsCircuit Worker that builds ON TOP of this auth+admin
+ * layer — see SEED.md §10.
  *
- * Branding from joeblew999/remy-sport-biz/pitchdeck/index.html: paper-bg
- * light theme, cool dark blue-gray ink, warm Thai-marigold orange accent,
- * Inter body + Space Grotesk display + IBM Plex Mono.
+ * Mapping (ChampsCircuit → multitenant-worker schema):
+ *   role_code (ADMIN/ORGANIZER/COACH/PLAYER/...) → org_membership.role
+ *     (HEAD coach + ORGANIZER + ADMIN → OWNER; assistant + player → MEMBER)
+ *   org (school / club / federation) → organization (under admin's billing)
+ *   team                              → organization (sibling of school)
+ *   team_coaches.HEAD                 → org_membership OWNER
+ *   team_coaches.ASSISTANT            → org_membership MEMBER
+ *   player_teams                      → org_membership MEMBER (only for
+ *                                       players with linked user_id —
+ *                                       minors-without-account is a
+ *                                       ChampsCircuit nuance our schema
+ *                                       doesn't model)
+ *   PENDING_APPROVAL referee          → pending invitation (no user yet)
+ *
+ * Display names are bilingual "ภาษาไทย (English)" — Noto Sans Thai
+ * is in the remysport theme's body font stack, so Thai script renders
+ * correctly. This forces the demo to look like a real Thai SaaS, not
+ * a Western app with Thai labels bolted on.
  *
  * @typedef {import("../../src/seed-scenarios/types").Scenario} Scenario
  */
 
 export const SCENARIO_NAME = "remysport";
-export const DESCRIPTION = "Bangkok Suns basketball club — 5 teams, multi-team captain, scout invites";
+export const DESCRIPTION = "ChampsCircuit — Thai basketball platform: 9 orgs (4 schools + federation + 4 teams), 6 actor types, bilingual display names";
 export const PASSWORD = "demo-password-123";
 
 // ============================================================
-// THEME
+// THEME — unchanged from prior remysport (paper bg, marigold orange,
+// Inter / Space Grotesk / IBM Plex Mono, Noto Sans Thai in body stack).
 // ============================================================
 
 export const THEME = {
   colorScheme: "light",
   palette: {
     base: {
-      // Surfaces — warm paper tones
       "paper":           "oklch(0.985 0.005 90)",
       "paper-2":         "oklch(0.965 0.008 90)",
       "paper-3":         "oklch(0.93 0.01 80)",
       "rule":            "oklch(0.85 0.005 90)",
-      // Editorial-shaped vars so the chrome (.shell/.topbar/.brand/.page)
-      // renders correctly under remysport without per-chrome forks.
       "black":           "oklch(0.985 0.005 90)",
       "surface":         "oklch(0.985 0.005 90)",
       "surface-raised":  "oklch(0.965 0.008 90)",
       "border":          "oklch(0.85 0.005 90)",
       "border-visible":  "oklch(0.78 0.01 80)",
-      // Ink — cool dark blue-gray
       "text-disabled":   "oklch(0.65 0.005 270)",
       "text-secondary":  "oklch(0.55 0.01 270)",
       "text-primary":    "oklch(0.32 0.01 270)",
       "text-display":    "oklch(0.18 0.01 270)",
-      // Accent — warm Thai marigold
       "accent":          "oklch(0.62 0.18 35)",
       "accent-subtle":   "oklch(0.62 0.18 35 / 0.15)",
       "success":         "oklch(0.55 0.14 145)",
@@ -53,11 +69,11 @@ export const THEME = {
       "error":           "oklch(0.55 0.22 25)",
       "interactive":     "oklch(0.48 0.18 35)",
     },
-    light: {},   // base IS light; no prefers-color-scheme variant
+    light: {},
   },
   fonts: {
     "font-display": '"Space Grotesk", "DM Sans", system-ui, sans-serif',
-    "font-body":    '"Inter", system-ui, sans-serif',
+    "font-body":    '"Inter", "Noto Sans Thai", system-ui, sans-serif',
     "font-mono":    '"IBM Plex Mono", "JetBrains Mono", "SF Mono", monospace',
   },
   scale: {
@@ -115,109 +131,185 @@ export const THEME = {
 };
 
 // ============================================================
-// ACCOUNTS
+// ACCOUNTS — 6 DevAccount cards, one per actor type that exists in
+// the ChampsCircuit data model (Admin / Organizer / Coach / Player /
+// Spectator / Referee). Sourced from remy-sport-biz/data/seed/users.csv.
+//
+// Each email matches a user the seed() function below actually creates.
+// The translation rule: CSV's `.test` TLD → our convention's `.example`
+// TLD (both RFC-reserved; we use .example per SEED.md §3).
 // ============================================================
 
 export const ACCOUNTS = [
   {
-    email: "coach@bangkok-suns.example",
-    label: "Coach (owns 5 teams)",
-    scenario: "Owns Bangkok Suns + 5 teams; multi-team scope-switcher demo",
+    email: "admin@remysport.example",
+    label: "System Admin — Platform overseer",
+    scenario: "Owns the platform billing — every org/team is under their tenancy. Sees everything.",
     landAt: "/",
     badge: "orange",
   },
   {
-    email: "captain@suns.example",
-    label: "Captain (multi-team)",
-    scenario: "Member of Senior A, owner of Senior B — mixed-role rows",
+    email: "somchai.p@assumption.example",
+    label: "สมชาย พัฒนสกุล — Organizer (Assumption)",
+    scenario: "Owns Assumption College school + its U16/U18 boys teams. Runs tournaments for the school.",
     landAt: "/",
     badge: "blue",
   },
   {
-    email: "scout@asia-league.example",
-    label: "Scout (5 pending trials)",
-    scenario: "Pending team-trial invites across different squads",
-    landAt: "/invitations",
+    email: "wichai.s@assumption.example",
+    label: "วิชัย ศรีสุข — Head Coach (Assumption)",
+    scenario: "OWNER of Assumption U16 Boys + U18 Boys. Manages two team rosters across the season.",
+    landAt: "/",
     badge: "purple",
   },
   {
-    email: "manager@suns-academy.example",
-    label: "Manager (pending club-staff invite)",
-    scenario: "One pending invite to join the club's billing scope as staff",
-    landAt: "/invitations",
+    email: "thanakorn.s@personal.example",
+    label: "ธนกร สุขใส — Player (transferred mid-season)",
+    scenario: "Member of Assumption U16 Boys AND U18 Boys — example of mid-season promotion across rosters.",
+    landAt: "/",
     badge: "teal",
+  },
+  {
+    email: "pim.s@personal.example",
+    label: "พิม สุขใส — Spectator (parent of Thanakorn)",
+    scenario: "Parent following her son's team. One pending supporter invite to Assumption College.",
+    landAt: "/invitations",
+    badge: "orange",
+  },
+  {
+    email: "adisorn.b@bat.example",
+    label: "อดิศร บุญชัย — Referee (BSBL-accredited)",
+    scenario: "Accredited referee — member of the Basketball Sport Association of Thailand federation.",
+    landAt: "/",
+    badge: "blue",
   },
 ];
 
 // ============================================================
-// SEED
+// SEED — builds the org tree + memberships + invites.
+//
+// Architecture: admin signs up first; the admin's personal billing
+// account becomes the "platform tenancy" — every org/team is created
+// under it. Other users sign up via invites and get memberships in
+// the orgs that match their CSV-defined roles.
+//
+// This mirrors a real Thai platform admin's view: one tenancy holding
+// the entire ecosystem of schools, federation, and teams.
 // ============================================================
 
 export async function seed(h) {
-  console.log("[seed:remysport] core users");
-  const coach   = await h.ensureUser("coach@bangkok-suns.example");
-  const scout   = await h.ensureUser("scout@asia-league.example");
-  const manager = await h.ensureUser("manager@suns-academy.example");
+  console.log("[seed:remysport] admin — platform owner");
+  const admin = await h.ensureUser("admin@remysport.example");
 
-  console.log("[seed:remysport] coach's teams (5 + long-name)");
-  const club    = await h.ensureOrg(coach, "Bangkok Suns");
-  const seniorA = await h.ensureOrg(coach, "Senior A");
-  const seniorB = await h.ensureOrg(coach, "Senior B");
-  const u18Boys = await h.ensureOrg(coach, "U18 Boys");
-  const u16Girls = await h.ensureOrg(coach, "U16 Girls");
-  const trainingSquad = await h.ensureOrg(
-    coach,
-    "Bangkok Suns Pre-Season Trial Squad (Closed Sessions, Coaches Only)"
-  );
+  console.log("[seed:remysport] orgs — 4 schools/clubs + 1 federation");
+  // Bilingual display names: "ภาษาไทย (English)" — matches the CSV.
+  const assumption = await h.ensureOrg(admin, "โรงเรียนอัสสัมชัญ (Assumption College)");
+  const triamUdom = await h.ensureOrg(admin, "โรงเรียนเตรียมอุดมศึกษา (Triam Udom Suksa School)");
+  const montfort  = await h.ensureOrg(admin, "โรงเรียนมงฟอร์ตวิทยาลัย (Montfort College)");
+  const bsbl      = await h.ensureOrg(admin, "สมาคมกีฬาบาสเกตบอลแห่งประเทศไทย (Basketball Sport Association of Thailand)");
+  const bangkokBc = await h.ensureOrg(admin, "สโมสรบาสเกตบอลกรุงเทพ (Bangkok Basketball Club)");
 
-  console.log("[seed:remysport] captain — multi-team");
-  let captain = await h.login("captain@suns.example");
-  if (!captain) {
-    const inv = await h.tryInviteToOrg(coach, club.id, "captain@suns.example");
-    captain = inv
-      ? await h.ensureUserWithInvite("captain@suns.example", inv.token)
-      : await h.ensureUser("captain@suns.example");
+  console.log("[seed:remysport] teams — 4 from teams.csv");
+  const teamAsmU16Boys = await h.ensureOrg(admin, "ทีมบาสเกตบอลอัสสัมชัญ U16 ชาย (Assumption U16 Boys)");
+  const teamAsmU18Boys = await h.ensureOrg(admin, "ทีมบาสเกตบอลอัสสัมชัญ U18 ชาย (Assumption U18 Boys)");
+  const teamTuU18Girls = await h.ensureOrg(admin, "ทีมบาสเกตบอลเตรียมอุดมศึกษา U18 หญิง (Triam Udom U18 Girls)");
+  const teamMfU16Boys  = await h.ensureOrg(admin, "ทีมบาสเกตบอลมงฟอร์ต U16 ชาย (Montfort U16 Boys)");
+
+  // ──────────────────────────────────────────────────────────
+  // Organizers (3 from users.csv)
+  // Each organizer is invited as OWNER of the school they run.
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] organizers");
+  await h.inviteAndJoin(admin, assumption.id, "somchai.p@assumption.example", "ROLE_OWNER"); // Somchai @ Assumption
+  await h.inviteAndJoin(admin, bsbl.id, "niran.w@bsbl.example", "ROLE_OWNER");               // Niran @ BSBL
+  await h.inviteAndJoin(admin, montfort.id, "apinya.k@cmcamp.example", "ROLE_OWNER");        // Apinya @ Montfort
+
+  // ──────────────────────────────────────────────────────────
+  // Coaches (3 from team_coaches.csv)
+  // HEAD → OWNER of the team; ASSISTANT → MEMBER.
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] coaches");
+  // Wichai: HEAD of Assumption U16 Boys + Assumption U18 Boys
+  await h.inviteAndJoin(admin, teamAsmU16Boys.id, "wichai.s@assumption.example", "ROLE_OWNER");
+  await h.tryInviteToOrg(admin, teamAsmU18Boys.id, "wichai.s@assumption.example", "ROLE_OWNER");
+
+  // Pranom: HEAD of Triam Udom U18 Girls + ASSISTANT at Assumption U16 Boys
+  await h.inviteAndJoin(admin, teamTuU18Girls.id, "pranom.c@triamudom.example", "ROLE_OWNER");
+  await h.tryInviteToOrg(admin, teamAsmU16Boys.id, "pranom.c@triamudom.example", "ROLE_MEMBER");
+
+  // Sutee: HEAD of Montfort U16 Boys
+  await h.inviteAndJoin(admin, teamMfU16Boys.id, "sutee.k@montfort.example", "ROLE_OWNER");
+
+  // ──────────────────────────────────────────────────────────
+  // Players (only the 2 with user accounts in players.csv)
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] players");
+  // Thanakorn: on Assumption U16 Boys AND U18 Boys (mid-season transfer per CSV)
+  let thanakorn = await h.login("thanakorn.s@personal.example");
+  if (!thanakorn) {
+    const inv = await h.tryInviteToOrg(admin, teamAsmU16Boys.id, "thanakorn.s@personal.example");
+    thanakorn = inv
+      ? await h.ensureUserWithInvite("thanakorn.s@personal.example", inv.token)
+      : await h.ensureUser("thanakorn.s@personal.example");
   }
-  await h.tryInviteToOrg(coach, seniorA.id, "captain@suns.example");
-  await h.tryInviteToOrg(coach, seniorB.id, "captain@suns.example", "ROLE_OWNER");
+  await h.tryInviteToOrg(admin, teamAsmU18Boys.id, "thanakorn.s@personal.example");
 
-  console.log("[seed:remysport] roster (auto-accept on signup)");
-  await h.inviteAndJoin(coach, seniorA.id, "guard@suns.example");
-  await h.inviteAndJoin(coach, seniorA.id, "forward@suns.example");
-  await h.inviteAndJoin(coach, seniorB.id, "rookie@suns.example");
-  await h.inviteAndJoin(coach, u18Boys.id, "wing@u18-boys.example");
-  await h.inviteAndJoin(coach, u18Boys.id, "point@u18-boys.example");
-  await h.inviteAndJoin(coach, u16Girls.id, "captain@u16-girls.example");
-  await h.inviteAndJoin(coach, u16Girls.id, "shooter@u16-girls.example");
-  await h.inviteAndJoin(coach, trainingSquad.id, "tryout-04@academy.example");
-  await h.inviteAndJoin(coach, club.id, "นักบาส@สโมสร.example");
+  // Kanya: on Triam Udom U18 Girls
+  await h.inviteAndJoin(admin, teamTuU18Girls.id, "kanya.t@personal.example");
 
-  console.log("[seed:remysport] scout — pending team-trial invites");
-  await h.tryInviteToOrg(coach, club.id, "scout@asia-league.example");
-  await h.tryInviteToOrg(coach, seniorA.id, "scout@asia-league.example");
-  await h.tryInviteToOrg(coach, u18Boys.id, "scout@asia-league.example");
-  await h.tryInviteToOrg(coach, u16Girls.id, "scout@asia-league.example");
-  await h.tryInviteToOrg(coach, trainingSquad.id, "scout@asia-league.example", "ROLE_OWNER");
+  // ──────────────────────────────────────────────────────────
+  // Referee (1 active, 1 pending — matches users.csv statuses)
+  // Active referees are members of the federation; pending = invite only.
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] referees");
+  await h.inviteAndJoin(admin, bsbl.id, "adisorn.b@bat.example");
 
-  console.log("[seed:remysport] manager — pending club-staff invite");
-  await h.tryInviteToBilling(coach, coach.whoami.billingAccountId, "manager@suns-academy.example");
+  // ──────────────────────────────────────────────────────────
+  // Spectator / Parent (1 from users.csv — Pim is Thanakorn's mom)
+  // Sign up the user, then create one pending invite as a "supporter"
+  // to Assumption (the school of her son's team).
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] spectator / parent");
+  const pim = await h.ensureUser("pim.s@personal.example");
+  await h.tryInviteToOrg(admin, assumption.id, "pim.s@personal.example");
+
+  // ──────────────────────────────────────────────────────────
+  // Pending invitations to non-yet-existing users
+  // (waraporn = PENDING_APPROVAL referee, no account until accreditation)
+  // ──────────────────────────────────────────────────────────
+  console.log("[seed:remysport] pending invites");
+  await h.tryInviteToOrg(admin, bsbl.id, "waraporn.j@bat.example", "ROLE_MEMBER");
+
+  // ──────────────────────────────────────────────────────────
+  // Manifest
+  // ──────────────────────────────────────────────────────────
+  // Re-fetch principal users to get fresh whoami payloads.
+  const somchai  = await h.login("somchai.p@assumption.example");
+  const wichai   = await h.login("wichai.s@assumption.example");
+  const adisorn  = await h.login("adisorn.b@bat.example");
 
   return {
     users: {
-      coach:   { email: coach.email,   token: coach.token,   whoami: coach.whoami },
-      captain: { email: captain.email, token: captain.token, whoami: captain.whoami },
-      scout:   { email: scout.email,   token: scout.token,   whoami: scout.whoami },
-      manager: { email: manager.email, token: manager.token, whoami: manager.whoami },
+      admin:     { email: admin.email,     token: admin.token,     whoami: admin.whoami },
+      somchai:   { email: somchai.email,   token: somchai.token,   whoami: somchai.whoami },
+      wichai:    { email: wichai.email,    token: wichai.token,    whoami: wichai.whoami },
+      thanakorn: { email: thanakorn.email, token: thanakorn.token, whoami: thanakorn.whoami },
+      pim:       { email: pim.email,       token: pim.token,       whoami: pim.whoami },
+      adisorn:   { email: adisorn.email,   token: adisorn.token,   whoami: adisorn.whoami },
     },
     orgs: {
-      club: club.id, seniorA: seniorA.id, seniorB: seniorB.id,
-      u18Boys: u18Boys.id, u16Girls: u16Girls.id, trainingSquad: trainingSquad.id,
+      assumption: assumption.id, triamUdom: triamUdom.id, montfort: montfort.id,
+      bsbl: bsbl.id, bangkokBc: bangkokBc.id,
+      teamAsmU16Boys: teamAsmU16Boys.id, teamAsmU18Boys: teamAsmU18Boys.id,
+      teamTuU18Girls: teamTuU18Girls.id, teamMfU16Boys: teamMfU16Boys.id,
     },
     notes: {
-      coach:   "/billing → 5 teams + trial squad; club is billing root",
-      captain: "/ → multi-team: member of Senior A, owner of Senior B",
-      scout:   "/invitations → 5 pending trials across teams",
-      manager: "/invitations → 1 pending club-staff invite",
+      admin:     "/ → owns the platform billing; sees all 9 orgs",
+      somchai:   "/ → organizer at Assumption College; runs the school's tournaments",
+      wichai:    "/ → head coach of Assumption U16 + U18 Boys (multi-team OWNER)",
+      thanakorn: "/ → player on Assumption U16 Boys + U18 Boys (mid-season transfer)",
+      pim:       "/invitations → pending supporter invite to Assumption (her son's school)",
+      adisorn:   "/ → accredited referee at the Basketball Sport Association of Thailand",
     },
   };
 }

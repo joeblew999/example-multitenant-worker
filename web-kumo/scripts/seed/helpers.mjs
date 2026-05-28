@@ -100,11 +100,15 @@ export function makeHelpers(base, password) {
     }
   }
 
-  /** Invite + auto-accept by signup — for batch member-population. */
-  async function inviteAndJoin(inviter, orgId, email) {
+  /**
+   * Invite + auto-accept by signup — for batch member-population.
+   * `role` controls the membership granted on accept. Defaults to MEMBER.
+   * Pass "ROLE_OWNER" for head coaches / organizers / etc.
+   */
+  async function inviteAndJoin(inviter, orgId, email, role = "ROLE_MEMBER") {
     const existing = await login(email);
     if (existing) return existing;
-    const inv = await tryInviteToOrg(inviter, orgId, email);
+    const inv = await tryInviteToOrg(inviter, orgId, email, role);
     if (!inv) return await ensureUser(email);
     return await ensureUserWithInvite(email, inv.token);
   }
