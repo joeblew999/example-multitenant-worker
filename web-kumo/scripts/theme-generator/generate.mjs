@@ -1,63 +1,77 @@
 #!/usr/bin/env node
 /**
- * Theme CSS generator — orchestrator.
+ * Theme CSS generator — auto-discovers scenarios.
  *
- * Imports each theme config (config.<name>.mjs), validates against
- * Kumo's THEME_CONFIG (catches typos / removed tokens), and emits
- * the per-theme CSS files via engine.mjs.
+ * Globs `scenarios/* /scenario.mjs` (one folder per scenario), validates
+ * each against Kumo's THEME_CONFIG, and emits per-scenario palette +
+ * Kumo-mappings CSS files.
  *
- * To add a new theme:
- *   1. Copy config.editorial.mjs → config.<name>.mjs, edit values.
- *   2. Add the import to THEMES below.
- *   3. Run `mise run kumo:theme-gen`.
- *   4. Import the generated palette in src/styles.css.
- *   5. Add the theme name to src/theme.ts THEMES array so the
- *      ThemeToggle can switch to it.
+ * To add a new scenario: create `scenarios/<name>/scenario.mjs` exporting
+ * SCENARIO_NAME + THEME (see src/seed-scenarios/types.ts). Run
+ * `mise run kumo:theme-gen`. No registry to update.
  *
- * Why we hand-roll a generator instead of using Kumo's:
- *   Kumo ships only `dist/scripts/theme-generator/generate-css.d.ts`
- *   (types only) — no .js runtime, not in the package.json exports
- *   map. Their generator is a build-internal helper; consumers must
- *   hand-roll. See KUMO.md §4.
- *
- * Why the emitted CSS is unlayered + scoped to [data-theme="X"]:
- *   - Unlayered beats Kumo's unlayered :root/:host defaults (KUMO.md §3).
- *   - [data-theme="X"] scoping (not :root) lets multiple themes coexist
- *     on the same page. Whichever data-theme is set on <html> wins via
- *     normal CSS variable inheritance.
+ * Why hand-roll instead of Kumo's generator: see KUMO.md §4.
  */
 
-import { writeFile } from "node:fs/promises";
+import { readdir, writeFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { emitPaletteCSS, emitMappingsCSS, validate } from "./engine.mjs";
-import * as editorial from "./config.editorial.mjs";
-import * as remysport from "./config.remysport.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const STYLES_DIR = join(HERE, "..", "..", "src", "styles");
+const ROOT = join(HERE, "..", "..");
+const SCENARIOS_DIR = join(ROOT, "scenarios");
+const STYLES_DIR = join(ROOT, "src", "styles");
 
-const THEMES = [editorial, remysport];
+/** Discover every scenarios/<name>/scenario.mjs. */
+async function discover() {
+  const entries = await readdir(SCENARIOS_DIR);
+  const scenarios = [];
+  for (const name of entries) {
+    const file = join(SCENARIOS_DIR, name, "scenario.mjs");
+    try {
+      await stat(file);
+    } catch {
+      continue;
+    }
+    const mod = await import(file);
+    if (!mod.SCENARIO_NAME || !mod.THEME) {
+      console.warn(`[theme:gen] skipping ${name}: missing SCENARIO_NAME or THEME`);
+      continue;
+    }
+    if (mod.SCENARIO_NAME !== name) {
+      throw new Error(
+        `scenarios/${name}/scenario.mjs has SCENARIO_NAME="${mod.SCENARIO_NAME}" — must equal folder name`
+      );
+    }
+    scenarios.push(mod);
+  }
+  return scenarios;
+}
 
-// --- Run --------------------------------------------------------------
+const scenarios = await discover();
+if (!scenarios.length) {
+  console.error(`[theme:gen] no scenarios found under ${SCENARIOS_DIR}`);
+  process.exit(1);
+}
 
-const allWarnings = [];
+const warnings = [];
+for (const scenario of scenarios) {
+  warnings.push(...validate(scenario));
 
-for (const theme of THEMES) {
-  allWarnings.push(...validate(theme));
+  const paletteOut = join(STYLES_DIR, `theme-${scenario.SCENARIO_NAME}-palette.css`);
+  const mappingsOut = join(STYLES_DIR, `theme-${scenario.SCENARIO_NAME}.css`);
 
-  const paletteOut = join(STYLES_DIR, `theme-${theme.THEME_NAME}-palette.css`);
-  const mappingsOut = join(STYLES_DIR, `theme-${theme.THEME_NAME}.css`);
-
-  await writeFile(paletteOut, emitPaletteCSS(theme));
+  await writeFile(paletteOut, emitPaletteCSS(scenario));
   console.log(`[theme:gen] wrote ${paletteOut}`);
-
-  await writeFile(mappingsOut, emitMappingsCSS(theme));
+  await writeFile(mappingsOut, emitMappingsCSS(scenario));
   console.log(`[theme:gen] wrote ${mappingsOut}`);
 }
 
-if (allWarnings.length) {
+if (warnings.length) {
   console.warn("[theme:gen] WARN — token names not in kumo base:");
-  for (const w of allWarnings) console.warn("  " + w);
+  for (const w of warnings) console.warn("  " + w);
 }
+
+console.log(`[theme:gen] ${scenarios.length} scenario(s): ${scenarios.map(s => s.SCENARIO_NAME).join(", ")}`);

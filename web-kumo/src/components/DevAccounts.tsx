@@ -42,7 +42,7 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
     try {
       const res = await authClient.login({
         email: acc.email,
-        password: ACTIVE_SCENARIO.password,
+        password: ACTIVE_SCENARIO.PASSWORD,
       });
       if (!res.whoami) throw new Error("login response missing whoami");
       setSession(res.sessionToken, res.whoami);
@@ -70,16 +70,16 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
         <Text as="h2" variant="heading2">Demo accounts</Text>
         <p className="mt-1 text-kumo-subtle text-sm">
           Scenario:{" "}
-          <code className="font-mono">{ACTIVE_SCENARIO.name}</code>.
+          <code className="font-mono">{ACTIVE_SCENARIO.SCENARIO_NAME}</code>.
           Click any account to sign in. Shared password:{" "}
-          <code className="font-mono">{ACTIVE_SCENARIO.password}</code>.
+          <code className="font-mono">{ACTIVE_SCENARIO.PASSWORD}</code>.
         </p>
       </div>
 
       {error && <Banner variant="error">{error}</Banner>}
 
       <div className="flex flex-col gap-3">
-        {ACTIVE_SCENARIO.accounts.map((acc) => (
+        {ACTIVE_SCENARIO.ACCOUNTS.map((acc) => (
           <div
             key={acc.email}
             className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg ring ring-kumo-line"

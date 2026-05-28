@@ -1,16 +1,13 @@
 /**
  * AUTO-GENERATED — do not edit directly.
  *
- * Source:    scripts/theme-generator/config.remysport.mjs
- *            (PALETTE + FONTS + SCALE exports)
+ * Source:    scenarios/remysport/scenario.mjs (THEME export)
  * Generator: scripts/theme-generator/generate.mjs
  * Regen:     mise run kumo:theme-gen
  *
- * Declares the remysport palette as CSS custom properties scoped to
- * `[data-theme="remysport"]` so multiple themes can coexist on the
- * same page. Every other file in the stack references these vars rather
- * than inlining hex values; the palette is the single source of truth
- * in config.remysport.mjs.
+ * Editorial palette as CSS custom properties scoped to
+ * [data-theme="remysport"] so multiple themes can coexist
+ * on one page. Other files reference these vars (`var(--accent)`).
  */
 
 [data-theme="remysport"] {

@@ -1,35 +1,36 @@
 /**
- * Active seed scenario for THIS build of the frontend.
+ * Active demo scenario for this build of the frontend.
  *
- * Picked via `VITE_SEED_SCENARIO` env var at build/dev time. Defaults
- * to "editorial". The same env var ALSO sets `<html data-theme="...">`
+ * Auto-discovers every `scenarios/<name>/scenario.mjs` via Vite's
+ * `import.meta.glob`. No SCENARIOS map to maintain — drop a new
+ * scenarios/<name>/ folder and it's picked up automatically.
+ *
+ * The active scenario is picked by `VITE_SEED_SCENARIO` (default:
+ * "editorial"). The same env var ALSO sets `<html data-theme="...">`
  * in index.html, so theme + DevAccounts list + backend seed all stay
  * coherent: one env var = one demo.
- *
- * Each scenario module must export a SeedScenario object whose `name`
- * matches the file basename + the SCENARIO env var used by
- * scripts/seed/run.mjs.
- *
- * Add a new scenario:
- *   1. Create src/seed-scenarios/<name>.ts (exports a SeedScenario).
- *   2. Create scripts/seed/scenario.<name>.mjs (creates the users +
- *      orgs the scenario references).
- *   3. Register both in the lookup tables (this file, run.mjs).
- *   4. (Optional) Add a theme with the same name — see KUMO.md §11.
  */
 
-import type { SeedScenario } from "./types";
-import { EDITORIAL } from "./editorial";
-import { REMYSPORT } from "./remysport";
+import type { Scenario } from "./types";
 
-const SCENARIOS: Record<string, SeedScenario> = {
-  editorial: EDITORIAL,
-  remysport: REMYSPORT,
-};
+// eager: true so ACTIVE_SCENARIO is synchronous. Cost: every scenario's
+// metadata (theme tokens + accounts) lives in the bundle. Code-split via
+// `eager: false` + dynamic await if/when bundle size matters.
+const modules = import.meta.glob<Scenario>(
+  "/scenarios/*/scenario.mjs",
+  { eager: true },
+);
+
+const SCENARIOS: Record<string, Scenario> = Object.fromEntries(
+  Object.values(modules).map((mod) => [mod.SCENARIO_NAME, mod]),
+);
 
 const requested = import.meta.env.VITE_SEED_SCENARIO ?? "editorial";
 
-export const ACTIVE_SCENARIO: SeedScenario =
-  SCENARIOS[requested] ?? EDITORIAL;
+export const ACTIVE_SCENARIO: Scenario =
+  SCENARIOS[requested] ?? SCENARIOS.editorial;
 
-export type { SeedScenario, DemoAccount } from "./types";
+/** All discovered scenario names — useful for diagnostics or a switcher UI. */
+export const AVAILABLE_SCENARIOS: string[] = Object.keys(SCENARIOS).sort();
+
+export type { Scenario, DemoAccount } from "./types";
