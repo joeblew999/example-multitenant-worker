@@ -18,7 +18,7 @@
  * confuse the next page load.
  */
 
-export const THEMES = ["editorial", "kumo", "fedramp"] as const;
+export const THEMES = ["editorial", "remysport", "kumo", "fedramp"] as const;
 export type Theme = (typeof THEMES)[number];
 
 export const DEFAULT_THEME: Theme = "editorial";

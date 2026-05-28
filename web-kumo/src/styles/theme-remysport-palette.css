@@ -1,0 +1,71 @@
+/**
+ * AUTO-GENERATED — do not edit directly.
+ *
+ * Source:    scripts/theme-generator/config.remysport.mjs
+ *            (PALETTE + FONTS + SCALE exports)
+ * Generator: scripts/theme-generator/generate.mjs
+ * Regen:     mise run kumo:theme-gen
+ *
+ * Declares the remysport palette as CSS custom properties scoped to
+ * `[data-theme="remysport"]` so multiple themes can coexist on the
+ * same page. Every other file in the stack references these vars rather
+ * than inlining hex values; the palette is the single source of truth
+ * in config.remysport.mjs.
+ */
+
+[data-theme="remysport"] {
+  /* Colors (base mode) */
+  --paper: oklch(0.985 0.005 90);
+  --paper-2: oklch(0.965 0.008 90);
+  --paper-3: oklch(0.93 0.01 80);
+  --rule: oklch(0.85 0.005 90);
+  --black: oklch(0.985 0.005 90);
+  --surface: oklch(0.985 0.005 90);
+  --surface-raised: oklch(0.965 0.008 90);
+  --border: oklch(0.85 0.005 90);
+  --border-visible: oklch(0.78 0.01 80);
+  --text-disabled: oklch(0.65 0.005 270);
+  --text-secondary: oklch(0.55 0.01 270);
+  --text-primary: oklch(0.32 0.01 270);
+  --text-display: oklch(0.18 0.01 270);
+  --accent: oklch(0.62 0.18 35);
+  --accent-subtle: oklch(0.62 0.18 35 / 0.15);
+  --success: oklch(0.55 0.14 145);
+  --warning: oklch(0.75 0.16 75);
+  --error: oklch(0.55 0.22 25);
+  --interactive: oklch(0.48 0.18 35);
+
+  /* Typography */
+  --font-display: "Space Grotesk", "DM Sans", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", "SF Mono", monospace;
+
+  /* Scale — type, spacing, radii, motion */
+  --display-xl: 72px;
+  --display-lg: 48px;
+  --display-md: 36px;
+  --heading: 24px;
+  --subheading: 18px;
+  --body: 16px;
+  --body-sm: 14px;
+  --caption: 12px;
+  --label: 11px;
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+  --radius-card: 16px;
+  --radius-compact: 8px;
+  --radius-tech: 4px;
+  --radius-pill: 999px;
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --easing: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  color-scheme: light;
+}

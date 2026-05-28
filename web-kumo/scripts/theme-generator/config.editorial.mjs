@@ -1,17 +1,17 @@
 /**
- * Editorial theme — config (single source of truth).
+ * Editorial theme — config (single source of truth for this theme).
  *
- * This file owns every editorial design token. The generator
- * (`generate.mjs`) emits two CSS files from it:
+ * The generator (`generate.mjs`) emits two CSS files from this:
  *
- *   1. theme-editorial-palette.css — :root vars (colors, fonts, scale)
- *      + a `prefers-color-scheme: light` override. These vars are what
- *      every other CSS file in the app references via `var(--accent)`,
- *      `var(--surface)`, etc.
+ *   1. theme-editorial-palette.css — [data-theme="editorial"] vars
+ *      (colors, fonts, scale) + a `prefers-color-scheme: light` override.
+ *      Every other CSS file references these via `var(--accent)` etc.
  *
- *   2. theme-editorial.css — `[data-theme="editorial"]` rules that map
- *      Kumo's `--color-kumo-*` tokens to our palette via the vars
- *      defined in (1).
+ *   2. theme-editorial.css — [data-theme="editorial"] block mapping
+ *      Kumo's `--color-kumo-*` tokens to the palette via var() refs.
+ *
+ * To add a new theme, copy this file as `config.<name>.mjs`, swap the
+ * THEME_NAME + values, register it in `generate.mjs`'s THEMES array.
  *
  * @typedef {import("@cloudflare/kumo/scripts/theme-generator/types").ThemeConfig} ThemeConfig
  */
@@ -22,11 +22,15 @@ export const THEME_NAME = "editorial";
 // PALETTE — canonical hex values, base (dark) + light overrides.
 //
 // Keys are kebab-case so they're emitted as `--<key>: <value>` 1:1.
-// `base` is the default :root rule (dark mode canonical). `light` is
-// a sparse override — only list the vars that change for light mode.
+// `base` is the default; `light` is a sparse override — only list the
+// vars that change for light mode (anything omitted inherits from base).
+// `colorScheme` / `colorSchemeLight` set the CSS color-scheme property
+// so native form controls and scrollbars match.
 // ============================================================
 
 export const PALETTE = {
+  colorScheme: "dark",
+  colorSchemeLight: "light",
   base: {
     "black":           "#000000",
     "surface":         "#111111",
@@ -44,8 +48,6 @@ export const PALETTE = {
     "error":           "#d71921",
     "interactive":     "#5b9bf6",
   },
-  // Only list vars that DIFFER from base. Anything omitted keeps the
-  // base value across light mode (e.g. accent stays editorial red).
   light: {
     "black":           "#f5f5f5",
     "surface":         "#ffffff",
@@ -111,15 +113,14 @@ export const SCALE = {
 };
 
 // ============================================================
-// EDITORIAL_OVERRIDES — Kumo `--color-kumo-*` token mappings.
+// KUMO_OVERRIDES — Kumo `--color-kumo-*` token mappings.
 // References the vars defined in PALETTE/FONTS/SCALE via `var(--...)`.
-// Don't inline hex here unless you want to bypass the palette.
 // ============================================================
 
 const accent = "var(--accent)";
-const v = (value) => ({ theme: { editorial: { light: value, dark: value } } });
+const v = (value) => ({ theme: { [THEME_NAME]: { light: value, dark: value } } });
 
-export const EDITORIAL_OVERRIDES = {
+export const KUMO_OVERRIDES = {
   text: {
     "kumo-default":     v("var(--text-primary)"),
     "kumo-strong":      v("var(--text-display)"),
@@ -130,7 +131,6 @@ export const EDITORIAL_OVERRIDES = {
     "kumo-link":        v(accent),
   },
   color: {
-    // Surfaces
     "kumo-canvas":      v("var(--surface)"),
     "kumo-elevated":    v("var(--surface-raised)"),
     "kumo-recessed":    v("var(--surface)"),
@@ -142,30 +142,20 @@ export const EDITORIAL_OVERRIDES = {
     "kumo-fill-hover":  v("var(--border)"),
     "kumo-interact":    v("var(--border-visible)"),
     "kumo-contrast":    v("var(--text-display)"),
-
-    // Borders + focus
     "kumo-line":        v("var(--border)"),
     "kumo-hairline":    v("var(--border-visible)"),
     "kumo-focus":       v(accent),
-
-    // Brand
     "kumo-brand":       v(accent),
     "kumo-brand-hover": v(accent),
-
-    // Shadows — editorial avoids drop shadows
     "kumo-shadow-edge": v("transparent"),
     "kumo-shadow-drop": v("transparent"),
-
-    // Status tints — distinct enough for Banner intents to read at a glance.
-    // Banners apply these with /15-/30 alpha modifiers, so we need solid
-    // base colors that survive the alpha pass.
-    "kumo-info":          v("oklch(70% 0.10 240)"),       // muted blue
+    "kumo-info":          v("oklch(70% 0.10 240)"),
     "kumo-info-tint":     v("oklch(70% 0.10 240)"),
-    "kumo-success":       v("oklch(70% 0.13 150)"),       // muted green
+    "kumo-success":       v("oklch(70% 0.13 150)"),
     "kumo-success-tint":  v("oklch(70% 0.13 150)"),
-    "kumo-warning":       v("oklch(80% 0.16 80)"),        // amber
+    "kumo-warning":       v("oklch(80% 0.16 80)"),
     "kumo-warning-tint":  v("oklch(80% 0.16 80)"),
-    "kumo-danger":        v(accent),                      // editorial red
+    "kumo-danger":        v(accent),
     "kumo-danger-tint":   v(accent),
   },
   typography: {},

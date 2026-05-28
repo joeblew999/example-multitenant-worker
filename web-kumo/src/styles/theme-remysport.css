@@ -1,18 +1,18 @@
 /**
  * AUTO-GENERATED — do not edit directly.
  *
- * Source:    scripts/theme-generator/config.editorial.mjs
+ * Source:    scripts/theme-generator/config.remysport.mjs
  *            (KUMO_OVERRIDES export)
  * Generator: scripts/theme-generator/generate.mjs
  * Regen:     mise run kumo:theme-gen
  *
  * UNLAYERED on purpose — see KUMO.md §3 for why `@layer base` would
  * let Kumo's unlayered `:root, :host` defaults silently win.
- * Maps Kumo's --color-kumo-* tokens to the editorial palette vars
- * declared in theme-editorial-palette.css.
+ * Maps Kumo's --color-kumo-* tokens to the remysport palette vars
+ * declared in theme-remysport-palette.css.
  */
 
-[data-theme="editorial"] {
+[data-theme="remysport"] {
   /* Text colors */
   --text-color-kumo-default: var(--text-primary);
   --text-color-kumo-strong: var(--text-display);
@@ -38,15 +38,15 @@
   --color-kumo-hairline: var(--border-visible);
   --color-kumo-focus: var(--accent);
   --color-kumo-brand: var(--accent);
-  --color-kumo-brand-hover: var(--accent);
+  --color-kumo-brand-hover: var(--interactive);
   --color-kumo-shadow-edge: transparent;
   --color-kumo-shadow-drop: transparent;
   --color-kumo-info: oklch(70% 0.10 240);
   --color-kumo-info-tint: oklch(70% 0.10 240);
-  --color-kumo-success: oklch(70% 0.13 150);
-  --color-kumo-success-tint: oklch(70% 0.13 150);
-  --color-kumo-warning: oklch(80% 0.16 80);
-  --color-kumo-warning-tint: oklch(80% 0.16 80);
-  --color-kumo-danger: var(--accent);
-  --color-kumo-danger-tint: var(--accent);
+  --color-kumo-success: var(--success);
+  --color-kumo-success-tint: var(--success);
+  --color-kumo-warning: var(--warning);
+  --color-kumo-warning-tint: var(--warning);
+  --color-kumo-danger: var(--error);
+  --color-kumo-danger-tint: var(--error);
 }

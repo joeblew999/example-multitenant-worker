@@ -42,15 +42,18 @@
 @import "@cloudflare/kumo/styles";
 @import "tailwindcss";
 
-/* Editorial palette source-of-truth → generated from
-   scripts/theme-generator/config.editorial.mjs. Unlayered (see header). */
+/* Per-theme palettes — generated, each scoped to [data-theme="X"] so
+   they coexist. Add a new @import line when registering a new theme. */
 @import "./styles/theme-editorial-palette.css";
+@import "./styles/theme-remysport-palette.css";
 
-/* Editorial chrome — base resets + .shell/.topbar/.brand/.page rules. */
+/* App chrome — base resets + .shell/.topbar/.brand/.page rules.
+   References palette vars; works under any theme via cascade. */
 @import "./editorial-chrome.css" layer(legacy);
 
-/* Kumo --color-kumo-* mappings → generated, unlayered (see KUMO.md §3). */
+/* Per-theme Kumo --color-kumo-* mappings — generated, unlayered. */
 @import "./styles/theme-editorial.css";
+@import "./styles/theme-remysport.css";
 
 /* Editorial selector overrides (sidebar active red, h1 Doto, button caps). */
 @import "./styles/theme-editorial-extras.css" layer(editorial);
