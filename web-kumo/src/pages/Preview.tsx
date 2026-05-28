@@ -1,7 +1,8 @@
 // Theme + component showcase. Lives at /preview.
 //
-// /preview = developer debug page. Testers click DemoAccounts, flip
-// themes, see how every Kumo primitive looks under each theme.
+// /preview = developer / designer page. Flip themes and see how every
+// Kumo primitive looks under each. Demo accounts (sign-in cards) live
+// on /login — separate concern.
 
 import { useState } from "react";
 import {
@@ -37,7 +38,6 @@ import {
   Textarea,
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
-import { DevAccounts } from "../components/DevAccounts";
 import { ThemeToggle } from "../components/ThemeToggle";
 
 // Kumo Badge has both color-only variants (red/green/orange/etc.) and
@@ -99,8 +99,6 @@ export function Preview() {
         </div>
         <ThemeToggle />
       </LayerCard>
-
-      <DevAccounts />
 
       {/* ── Typography ── */}
       <Section title="Typography" hint="Text variants — heading scale, body, code, monospace.">

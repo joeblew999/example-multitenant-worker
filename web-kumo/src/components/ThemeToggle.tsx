@@ -1,30 +1,43 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_THEME, setHtmlTheme, THEMES, type Theme } from "../theme";
+import { setHtmlTheme, THEMES, type Theme } from "../theme";
 
 /**
  * Dev-only theme A/B tool. Mounted ONLY on the /preview page.
  *
  * Mutates <html data-theme> live so you can verify components paint
- * correctly under editorial / kumo / fedramp. Resets to editorial on
- * unmount, so navigating away always lands you back in the canonical
- * theme — there is no persistence (no localStorage, no URL param).
+ * correctly under every available theme. Restores whatever theme was
+ * canonical when the toggle mounted on unmount — so navigating away
+ * always lands you back in the demo's canonical theme (set at build
+ * time via VITE_SEED_SCENARIO).
  *
- * This is intentional: editorial is THE theme for the app. The toggle
- * is a developer affordance, not a user preference.
+ * No persistence (no localStorage, no URL param). The toggle is a
+ * developer affordance, not a user preference.
  */
+
+/** Read the current <html data-theme> attribute (the canonical scenario). */
+function readHtmlTheme(): Theme {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t && (THEMES as readonly string[]).includes(t)) return t as Theme;
+  // Fallback if the canonical theme isn't in THEMES (shouldn't happen
+  // when scenario name === theme name by convention, but defensive).
+  return THEMES[0];
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
+  // Snapshot the canonical theme once at mount. This is what we restore
+  // to on unmount, regardless of what the user toggled to mid-page.
+  const [canonical] = useState<Theme>(readHtmlTheme);
+  const [theme, setTheme] = useState<Theme>(canonical);
 
   useEffect(() => {
     setHtmlTheme(theme);
   }, [theme]);
 
-  // Reset to editorial when the Preview page (and this component) unmounts.
   useEffect(() => {
     return () => {
-      setHtmlTheme(DEFAULT_THEME);
+      setHtmlTheme(canonical);
     };
-  }, []);
+  }, [canonical]);
 
   return (
     <div

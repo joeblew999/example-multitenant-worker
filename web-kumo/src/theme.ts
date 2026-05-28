@@ -1,27 +1,28 @@
 /**
  * Theme contract for this app.
  *
- *   Editorial is THE theme. Period.
+ * Each demo scenario (scenarios/<name>/scenario.mjs) declares its own
+ * theme via the THEME export. The canonical theme for THIS build is
+ * picked via VITE_SEED_SCENARIO and declared on `<html data-theme>` by
+ * index.html's `%VITE_SEED_SCENARIO%` substitution — paints on first
+ * frame with no JS dependency.
  *
- * Every page — login, signup, dashboard, members, billing, invitations —
- * renders in editorial. That's declared statically by `<html data-theme=
- * "editorial">` in index.html, so the theme is correct from the very
- * first paint (no FOUC, no JS dependency).
- *
- * The `kumo` and `fedramp` themes exist ONLY as a dev-time A/B tool on
- * the /preview showcase, to confirm that components we lift from Kumo
- * still look right when someone re-themes them. The <ThemeToggle> there
- * mutates the <html data-theme> attribute LIVE for the duration of the
- * Preview page, then resets to "editorial" on unmount. No localStorage,
- * no URL param, no persistence — so navigating away always lands you
- * back in editorial, and the toggle can't bleed into another tab or
- * confuse the next page load.
+ * The Kumo built-in themes (kumo, fedramp) are always available too,
+ * so the /preview ThemeToggle can A/B every component under each
+ * style. Scenario themes get listed first, then Kumo's built-ins.
  */
 
-export const THEMES = ["editorial", "remysport", "kumo", "fedramp"] as const;
-export type Theme = (typeof THEMES)[number];
+import { AVAILABLE_SCENARIOS } from "./seed-scenarios";
 
-export const DEFAULT_THEME: Theme = "editorial";
+/** Kumo ships these two themes; they coexist with our scenario themes. */
+const KUMO_BUILTIN_THEMES = ["kumo", "fedramp"] as const;
+
+export const THEMES: readonly string[] = [
+  ...AVAILABLE_SCENARIOS,
+  ...KUMO_BUILTIN_THEMES,
+] as const;
+
+export type Theme = string;
 
 /** Live-mutate the <html data-theme> attribute. No persistence. */
 export function setHtmlTheme(theme: Theme): void {

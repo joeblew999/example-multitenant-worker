@@ -42,49 +42,55 @@ export function Login() {
   }
 
   return (
-    <div className="page">
-      <AuthHero
-        eyebrow="Session / Login"
-        title="Log in."
-        lede="Resume your scoped session. Tokens are minted server-side and bound to your account."
-      />
-
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        {error && <Banner variant="error">{error}</Banner>}
-
-        <Input
-          label="Email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+    <>
+      <div className="page">
+        <AuthHero
+          eyebrow="Session / Login"
+          title="Log in."
+          lede="Resume your scoped session. Tokens are minted server-side and bound to your account."
         />
 
-        <SensitiveInput
-          label="Password"
-          autoComplete="current-password"
-          required
-          placeholder="••••••••"
-          value={password}
-          onValueChange={setPassword}
-        />
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          {error && <Banner variant="error">{error}</Banner>}
 
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Authenticating…" : "Log in"}
-          </Button>
-          <Text variant="secondary">
-            No account?{" "}
-            <Link to="/signup" className="text-kumo-brand underline">
-              Sign up
-            </Link>
-          </Text>
-        </div>
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-        <DevAccounts compact />
-      </form>
-    </div>
+          <SensitiveInput
+            label="Password"
+            autoComplete="current-password"
+            required
+            placeholder="••••••••"
+            value={password}
+            onValueChange={setPassword}
+          />
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "Authenticating…" : "Log in"}
+            </Button>
+            <Text variant="secondary">
+              No account?{" "}
+              <Link to="/signup" className="text-kumo-brand underline">
+                Sign up
+              </Link>
+            </Text>
+          </div>
+        </form>
+      </div>
+
+      {/* Demo accounts panel — rendered as a sibling so it can exceed the
+        * 480px .page card width. Hidden in production via VITE_SHOW_TEST_ACCOUNTS. */}
+      <div className="w-full max-w-2xl mx-auto">
+        <DevAccounts />
+      </div>
+    </>
   );
 }

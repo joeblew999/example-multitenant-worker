@@ -1,10 +1,10 @@
 /**
  * Click-to-sign-in panel for the active seed scenario's demo accounts.
  *
- * Source-of-truth is src/seed-scenarios/<active>.ts (chosen by
- * `VITE_SEED_SCENARIO` env var). The backend seed (scripts/seed/
- * scenario.<active>.mjs) must create matching users — the email
- * strings on both sides have to stay in sync.
+ * Lives on /login alongside the credential form. Source of truth is
+ * `scenarios/<active>/scenario.mjs` (chosen by VITE_SEED_SCENARIO).
+ * The backend seed must create matching users; ACCOUNT emails on both
+ * sides have to stay in sync.
  *
  * ## Naming convention: all seed emails use the `.example` TLD
  *
@@ -21,14 +21,14 @@
  */
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Badge, Banner, Button, LayerCard, Text } from "@cloudflare/kumo";
 import { authClient, errorMessage } from "../client";
 import { useAuth } from "../auth";
 import { devAccountsEnabled } from "../dev-flags";
 import { ACTIVE_SCENARIO, type DemoAccount } from "../seed-scenarios";
 
-export function DevAccounts({ compact = false }: { compact?: boolean }) {
+export function DevAccounts() {
   const { setSession } = useAuth();
   const nav = useNavigate();
   const [busy, setBusy] = useState<string | null>(null);
@@ -51,17 +51,6 @@ export function DevAccounts({ compact = false }: { compact?: boolean }) {
       setError(errorMessage(err, `failed to sign in as ${acc.email}`));
       setBusy(null);
     }
-  }
-
-  if (compact) {
-    return (
-      <p className="font-mono text-xs text-kumo-subtle m-0">
-        Tester?{" "}
-        <Link to="/preview" className="text-kumo-brand underline">
-          View demo accounts →
-        </Link>
-      </p>
-    );
   }
 
   return (
