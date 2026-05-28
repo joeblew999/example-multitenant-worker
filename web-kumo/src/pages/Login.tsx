@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Banner, Button, Input, SensitiveInput, Text } from "@cloudflare/kumo";
 import { useAuth } from "../auth";
 import { authClient, errorMessage } from "../client";
+import { AuthHero } from "../components/AuthHero";
 import { DevAccounts } from "../components/DevAccounts";
 
 // Only honor a `next` redirect if it's an internal, absolute path. Stops
@@ -41,48 +43,44 @@ export function Login() {
 
   return (
     <div className="page">
-      <section className="hero">
-        <span className="eyebrow">Session / Login</span>
-        <h1 className="display">Log in.</h1>
-        <p className="lede">
-          Resume your scoped session. Tokens are minted server-side and bound to your account.
-        </p>
-      </section>
+      <AuthHero
+        eyebrow="Session / Login"
+        title="Log in."
+        lede="Resume your scoped session. Tokens are minted server-side and bound to your account."
+      />
 
-      <form className="form" onSubmit={onSubmit}>
-        {error && <p className="status-line error">{error}</p>}
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        {error && <Banner variant="error">{error}</Banner>}
 
-        <label className="field">
-          <span className="label">Email</span>
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
+        <Input
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-        <label className="field">
-          <span className="label">Password</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            required
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        <SensitiveInput
+          label="Password"
+          autoComplete="current-password"
+          required
+          placeholder="••••••••"
+          value={password}
+          onValueChange={setPassword}
+        />
 
-        <div className="row between">
-          <button type="submit" disabled={busy}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <Button type="submit" variant="primary" disabled={busy}>
             {busy ? "Authenticating…" : "Log in"}
-          </button>
-          <span className="status-line">
-            No account? <Link to="/signup">Sign up</Link>
-          </span>
+          </Button>
+          <Text variant="secondary">
+            No account?{" "}
+            <Link to="/signup" className="text-kumo-brand underline">
+              Sign up
+            </Link>
+          </Text>
         </div>
 
         <DevAccounts compact />

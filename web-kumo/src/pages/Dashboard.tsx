@@ -11,6 +11,7 @@ import {
   Text,
 } from "@cloudflare/kumo";
 import { PageHeader } from "../components/kumo/page-header/page-header";
+import { KvList } from "../components/KvList";
 import { useAuth } from "../auth";
 import { authClient, errorMessage } from "../client";
 
@@ -138,31 +139,6 @@ export function Dashboard() {
         keyPrefix="org"
       />
     </div>
-  );
-}
-
-function KvList({ rows }: { rows: { k: string; v: React.ReactNode }[] }) {
-  return (
-    <dl className="grid grid-cols-[minmax(140px,200px)_1fr] gap-x-6">
-      {rows.map(({ k, v }, i) => (
-        <div key={k} className={`contents`}>
-          <dt
-            className={`py-3 text-sm uppercase tracking-wider text-kumo-subtle ${
-              i > 0 ? "border-t border-kumo-line" : ""
-            }`}
-          >
-            {k}
-          </dt>
-          <dd
-            className={`py-3 text-kumo-default ${
-              i > 0 ? "border-t border-kumo-line" : ""
-            }`}
-          >
-            {v}
-          </dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 

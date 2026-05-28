@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Banner, Button, Input, SensitiveInput, Text } from "@cloudflare/kumo";
 import { useAuth } from "../auth";
 import { authClient, errorMessage } from "../client";
+import { AuthHero } from "../components/AuthHero";
 
 export function Signup() {
   const { setSession } = useAuth();
@@ -36,56 +38,51 @@ export function Signup() {
 
   return (
     <div className="page">
-      <section className="hero">
-        <span className="eyebrow">Session / Provision</span>
-        <h1 className="display">Create account.</h1>
-        <p className="lede">
-          A fresh billing scope is minted on first sign-in. Org scopes are added later via
-          invitation.
-        </p>
-      </section>
+      <AuthHero
+        eyebrow="Session / Provision"
+        title="Create account."
+        lede="A fresh billing scope is minted on first sign-in. Org scopes are added later via invitation."
+      />
 
-      <form className="form" onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
         {inviteToken && (
-          <p className="status-line notice">
+          <Banner variant="default">
             Enrolling against an open invitation. Membership applies once the account is minted.
-          </p>
+          </Banner>
         )}
-        {error && <p className="status-line error">{error}</p>}
+        {error && <Banner variant="error">{error}</Banner>}
 
-        <label className="field">
-          <span className="label">Email</span>
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
+        <Input
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-        <label className="field">
-          <span className="label">Password</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            placeholder="min 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <span className="hint">Stored as scrypt hash. Never echoed.</span>
-        </label>
+        <SensitiveInput
+          label="Password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          placeholder="min 8 characters"
+          value={password}
+          onValueChange={setPassword}
+          description="Stored as a scrypt hash. Never echoed."
+        />
 
-        <div className="row between">
-          <button type="submit" disabled={busy}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <Button type="submit" variant="primary" disabled={busy}>
             {busy ? "Creating…" : "Create account"}
-          </button>
-          <span className="status-line">
-            Have an account? <Link to="/login">Log in</Link>
-          </span>
+          </Button>
+          <Text variant="secondary">
+            Have an account?{" "}
+            <Link to="/login" className="text-kumo-brand underline">
+              Log in
+            </Link>
+          </Text>
         </div>
       </form>
     </div>

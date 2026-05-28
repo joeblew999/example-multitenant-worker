@@ -1,11 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { Invitation } from "../../gen/workers/invitation/v1/invitation_pb.js";
-import { InvitationStatus, ScopeKind } from "../../gen/workers/invitation/v1/invitation_pb.js";
 import { timestampMs } from "@bufbuild/protobuf/wkt";
+import { Badge, Banner, Button, Text } from "@cloudflare/kumo";
+import type { Invitation } from "../../gen/workers/invitation/v1/invitation_pb.js";
+import {
+  InvitationStatus,
+  Role,
+  ScopeKind,
+} from "../../gen/workers/invitation/v1/invitation_pb.js";
 import { useAuth } from "../auth";
 import { authClient, errorMessage, invitationClient } from "../client";
+import { AuthHero } from "../components/AuthHero";
+import { KvList } from "../components/KvList";
 import { PageLoading } from "../components/PageLoading";
+
+const SCOPE_LABEL: Record<ScopeKind, string> = {
+  [ScopeKind.UNSPECIFIED]: "—",
+  [ScopeKind.BILLING]: "Billing",
+  [ScopeKind.ORG]: "Organization",
+};
+
+const ROLE_LABEL: Record<Role, string> = {
+  [Role.UNSPECIFIED]: "—",
+  [Role.OWNER]: "owner",
+  [Role.MEMBER]: "member",
+};
+
+const STATUS_LABEL: Record<InvitationStatus, string> = {
+  [InvitationStatus.UNSPECIFIED]: "—",
+  [InvitationStatus.PENDING]: "pending",
+  [InvitationStatus.ACCEPTED]: "accepted",
+  [InvitationStatus.DECLINED]: "declined",
+  [InvitationStatus.REVOKED]: "revoked",
+  [InvitationStatus.EXPIRED]: "expired",
+};
 
 type LoadState =
   | { kind: "loading" }
@@ -59,17 +87,17 @@ export function AcceptInvite() {
       </div>
     );
   }
+
   if (load.kind === "error") {
     return (
       <div className="page">
-        <section className="hero">
-          <span className="eyebrow">Invitation</span>
-          <h1 className="display sm">Invitation unavailable.</h1>
-        </section>
-        <p className="status-line error">{load.message}</p>
-        <p className="status-line">
-          <Link to="/">Back to dashboard</Link>
-        </p>
+        <AuthHero eyebrow="Invitation" title="Invitation unavailable." />
+        <Banner variant="error">{load.message}</Banner>
+        <Text variant="secondary">
+          <Link to="/" className="text-kumo-brand underline">
+            Back to dashboard
+          </Link>
+        </Text>
       </div>
     );
   }
@@ -81,6 +109,7 @@ export function AcceptInvite() {
   const emailMismatch =
     sessionEmail !== null && inv.email.toLowerCase() !== sessionEmail.toLowerCase();
   const scopeName = inv.scopeDisplayName || inv.scopeId;
+  const roleBadgeVariant = inv.role === Role.OWNER ? "orange" : "neutral";
 
   async function onAccept() {
     if (!token) return;
@@ -122,69 +151,76 @@ export function AcceptInvite() {
     }
   }
 
+  const eyebrow = `Invitation · ${SCOPE_LABEL[inv.scopeKind]} · ${STATUS_LABEL[inv.status]}${
+    expired ? " · expired" : ""
+  }`;
+
   return (
     <div className="page">
-      <section className="hero">
-        <span className="eyebrow">
-          Invitation · {inv.scopeKind} · status {inv.status}
-          {expired ? " · expired" : ""}
-        </span>
-        <h1 className="display">{scopeName}</h1>
-        <p className="lede">
-          You've been invited to join <strong>{scopeName}</strong> as{" "}
-          <span className="chip active">{inv.role}</span>. Accepting mints a membership and pivots
-          your session into it.
-        </p>
-      </section>
+      <AuthHero
+        eyebrow={eyebrow}
+        title={scopeName}
+        lede={
+          <>
+            You've been invited to join <strong>{scopeName}</strong> as{" "}
+            <Badge variant={roleBadgeVariant}>{ROLE_LABEL[inv.role]}</Badge>. Accepting
+            mints a membership and pivots your session into it.
+          </>
+        }
+      />
 
-      <section>
-        <div className="section-head">
-          <h2>Details</h2>
-          <span className="meta">
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <Text as="h2" variant="heading3">Details</Text>
+          <span className="text-sm text-kumo-subtle">
             {expiresAt > 0 ? `Expires ${new Date(expiresAt).toLocaleString()}` : "No expiry"}
           </span>
         </div>
 
-        <dl className="kv">
-          <div className="row">
-            <dt>Scope</dt>
-            <dd>
-              <strong>{scopeName}</strong> <span className="chip">{inv.scopeKind}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Role offered</dt>
-            <dd>
-              <span className="chip active">{inv.role}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Issued to</dt>
-            <dd>
-              <span className="mono">{inv.email}</span>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>Status</dt>
-            <dd>
-              {inv.status}
-              {expired && <span className="secondary"> · expired</span>}
-            </dd>
-          </div>
-          {inv.requiredIdp && (
-            <div className="row">
-              <dt>SSO required</dt>
-              <dd>
-                <span className="chip">{inv.requiredIdp}</span>
-              </dd>
-            </div>
-          )}
-        </dl>
+        <KvList
+          dtWidth="minmax(100px, 140px)"
+          rows={[
+            {
+              k: "Scope",
+              v: (
+                <span className="inline-flex items-center gap-2">
+                  <strong>{scopeName}</strong>
+                  <Badge variant="neutral">{SCOPE_LABEL[inv.scopeKind]}</Badge>
+                </span>
+              ),
+            },
+            {
+              k: "Role offered",
+              v: <Badge variant={roleBadgeVariant}>{ROLE_LABEL[inv.role]}</Badge>,
+            },
+            {
+              k: "Issued to",
+              v: <code className="font-mono text-sm">{inv.email}</code>,
+            },
+            {
+              k: "Status",
+              v: (
+                <span>
+                  {STATUS_LABEL[inv.status]}
+                  {expired && <span className="ml-2 text-kumo-subtle">· expired</span>}
+                </span>
+              ),
+            },
+            ...(inv.requiredIdp
+              ? [
+                  {
+                    k: "SSO required",
+                    v: <Badge variant="neutral">{inv.requiredIdp}</Badge>,
+                  },
+                ]
+              : []),
+          ]}
+        />
       </section>
 
-      {actionError && <p className="status-line error">{actionError}</p>}
+      {actionError && <Banner variant="error">{actionError}</Banner>}
 
-      <div className="row">
+      <div className="flex gap-3 flex-wrap">
         <InviteActions
           inactive={inactive}
           authStatus={state.status}
@@ -230,43 +266,48 @@ function InviteActions(props: InviteActionsProps) {
   } = props;
 
   if (inactive) {
-    return <p className="status-line">This invitation is no longer accepting responses.</p>;
+    return (
+      <Banner variant="default">This invitation is no longer accepting responses.</Banner>
+    );
   }
 
   if (authStatus === "anonymous") {
     return (
       <>
-        <button type="button" onClick={() => nav(`/signup?invite=${encodeURIComponent(token)}`)}>
+        <Button
+          variant="primary"
+          onClick={() => nav(`/signup?invite=${encodeURIComponent(token)}`)}
+        >
           Sign up to accept
-        </button>
-        <button
-          type="button"
-          className="secondary"
+        </Button>
+        <Button
+          variant="secondary"
           onClick={() => nav(`/login?next=${encodeURIComponent(`/invite/${token}`)}`)}
         >
           Log in to accept
-        </button>
+        </Button>
       </>
     );
   }
 
   if (emailMismatch) {
     return (
-      <p className="status-line error">
+      <Banner variant="error">
         Issued to <strong>{inviteEmail}</strong>, but you're logged in as{" "}
-        <strong>{sessionEmail}</strong>. Sign out and log in with the invited address to accept.
-      </p>
+        <strong>{sessionEmail}</strong>. Sign out and log in with the invited address to
+        accept.
+      </Banner>
     );
   }
 
   return (
     <>
-      <button type="button" disabled={busy !== null} onClick={onAccept}>
+      <Button variant="primary" disabled={busy !== null} onClick={onAccept}>
         {busy === "accept" ? "Accepting…" : "Accept"}
-      </button>
-      <button type="button" className="secondary" disabled={busy !== null} onClick={onDecline}>
+      </Button>
+      <Button variant="secondary" disabled={busy !== null} onClick={onDecline}>
         {busy === "decline" ? "Declining…" : "Decline"}
-      </button>
+      </Button>
     </>
   );
 }
