@@ -55,3 +55,87 @@ EMAIL_VERIFY_TTL_SECONDS = "86400"
 # When unset / empty: email is auto-verified (the demo default).
 # Setting to "true" enables the gated verify-email flow.
 ENFORCE_EMAIL_VERIFICATION = ""
+
+# ---------------------------------------------------------------------------
+# Observability + abuse-protection bindings used by the CF middleware family.
+# See https://github.com/joeblew999/cf-connectrpc-middleware (MIDDLEWARES.md
+# §4 Tier 1 for the layer designs). Miniflare emulates both locally so
+# `wrangler dev` exercises the full stack without provisioning anything
+# in the Cloudflare dashboard.
+# ---------------------------------------------------------------------------
+
+# Rate Limiting binding consumed by `connectrpc-cf-rate-limit`.
+#
+# Rate Limiting is still a beta binding type, so it has to be declared
+# under `[[unsafe.bindings]]` rather than a first-class table. `namespace_id`
+# is an arbitrary string used by the runtime to scope counters — when we
+# eventually run a second worker we can reuse a namespace to share limits,
+# or pick a new one to isolate.
+#
+# `simple` is the inline policy: max `limit` events per `period` seconds
+# per key (the key is provided by `RateLimitKeyExtractor`, default per-IP).
+# 60 req/min/IP is a generous demo default — tune per service.
+[[unsafe.bindings]]
+name = "RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
+# Analytics Engine binding consumed by `connectrpc-cf-metrics`.
+#
+# Local dev: miniflare accepts writes and discards them (no real dataset).
+# Production: `dataset` is the AE dataset name — query it via
+# `wrangler analytics-engine query` or the SQL API. The dataset is
+# auto-created on first write.
+[[analytics_engine_datasets]]
+binding = "AE"
+dataset = "workers_multitenant_rpc_metrics"
+
+# ---------------------------------------------------------------------------
+# Local OPS workflow — how to use Cloudflare tools against this worker
+# ---------------------------------------------------------------------------
+#
+# Bring it up:
+#   mise run worker:d1-migrate        # one-shot, applies migrations/0001_init.sql to .wrangler/state/v3/d1
+#   mise run worker:dev               # wrangler dev on https://localhost:8787
+#
+# Watch tracing events stream by:
+#   tail -f .wrangler/state/v3/dev.log     # or just keep `wrangler dev` in foreground
+#   #  - cf-tracing emits one span per RPC with cf.colo / cf.country / cf.asn /
+#   #    cf.tls_cipher / cf.http_protocol / cf.ray / cf.procedure fields
+#   #  - Cedar's shadow-mode decision log nests inside that span context, so
+#   #    every `connectrpc_cedar: mode="shadow" decision=...` line carries
+#   #    the CF runtime metadata automatically.
+#
+# Drive traffic locally:
+#   TOKEN=$(curl -s -X POST http://localhost:8787/workers.auth.v1.AuthService/Signup \
+#     -H 'content-type: application/json' \
+#     -H 'cf-connecting-ip: 198.51.100.42' \
+#     -d '{"email":"dev@example.com","password":"very-long-password-here"}' \
+#     | jq -r .sessionToken)
+#   curl http://localhost:8787/workers.billing.v1.BillingService/ListMembers \
+#     -H "authorization: Bearer $TOKEN" -d '{"billingAccountId":"..."}' \
+#     -H 'cf-connecting-ip: 198.51.100.42' -H 'content-type: application/json'
+#
+# Local limitations vs production (you will see these):
+#   - env.RL is "Unsafe Metadata / remote" in `wrangler dev`. Calls succeed
+#     permissively (Allowed) without hitting Cloudflare's real rate-limiter.
+#     The cf-rate-limit layer wraps `worker::RateLimiter::limit` in a 500ms
+#     timeout so the worker fails-open if the remote round-trip ever stalls.
+#   - env.AE writes succeed locally but the data lands in miniflare's null
+#     sink — there's no local query surface. Use `wrangler tail` on a
+#     deployed worker (`mise run worker:deploy`) to see real AE writes.
+#
+# Production OPS:
+#   wrangler tail                         # live JSON log stream
+#     # filter to our middleware family:
+#     wrangler tail --format=json | jq 'select(.logs[]?.message[]?|test("connectrpc_cf_|connectrpc_cedar"))'
+#   wrangler analytics-engine query --persisted-query <id>
+#                                          # SQL over the AE dataset
+#     # quick ad-hoc, all RPC counts last hour grouped by procedure + status:
+#     # SELECT blob1 AS metric, blob2 AS procedure, blob3 AS status_class,
+#     #        SUM(double1) AS total
+#     # FROM workers_multitenant_rpc_metrics
+#     # WHERE timestamp > now() - INTERVAL '1' HOUR
+#     # GROUP BY metric, procedure, status_class
+#     # (Schema defined in src/middleware/cf_metrics.rs.)

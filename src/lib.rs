@@ -21,6 +21,7 @@ pub mod auth;
 pub mod billing;
 pub mod domain;
 pub mod middleware;
+pub mod observability;
 pub mod routes;
 pub mod services;
 pub mod state;
@@ -29,7 +30,10 @@ pub mod time;
 
 use crate::auth::Keyring;
 use crate::billing::BillingProvider;
-use crate::middleware::{AuthLayer, build_authorizer, shadow_layer};
+use crate::middleware::{
+    AuthLayer, build_authorizer, metrics_layer, rate_limit_observe_layer, shadow_layer,
+    tracing_layer,
+};
 use crate::proto::workers::auth::v1::AuthServiceExt;
 use crate::proto::workers::billing::v1::BillingServiceExt;
 use crate::proto::workers::invitation::v1::InvitationServiceExt;
@@ -45,6 +49,12 @@ async fn fetch(
     env: Env,
     _ctx: Context,
 ) -> worker::Result<http::Response<ConnectRpcBody>> {
+    // Install tracing-subscriber → JS console bridge. Idempotent — first
+    // call wins, subsequent ones no-op. Without this, every
+    // `tracing::info!` / `warn!` from the middleware family is dropped
+    // silently. See observability.rs.
+    observability::init();
+
     if let Some(resp) = routes::try_handle(&req) {
         return Ok(resp);
     }
@@ -61,10 +71,46 @@ async fn fetch(
     let cedar_authorizer = build_authorizer();
     let cedar_layer = shadow_layer::<worker::Body>(Arc::clone(&cedar_authorizer));
 
+    // -----------------------------------------------------------------
+    // CF observability + abuse stack (outside-in):
+    //
+    //   cf_tracing       — outermost; span wraps everything below so
+    //                      every event downstream carries cf.* fields
+    //   cf_metrics       — counter + latency for the full request
+    //                      including all middleware overhead, written
+    //                      to Analytics Engine
+    //   cf_rate_limit    — rejects abuse BEFORE any auth/DB work
+    //                      (per-IP via cf-connecting-ip; Mode::Observe
+    //                      until logs confirm key derivation)
+    //   auth_layer       — extracts session if present
+    //   cedar_layer      — path-based authz (Mode::Shadow)
+    //   ConnectRpcService — innermost; the actual dispatch
+    //
+    // Order matters: rate-limit on TOP of auth so we can throttle
+    // anonymous floods cheaply. Metrics on top of rate-limit so 429s
+    // get counted (status_class=4xx). Tracing on top of everything so
+    // its span context flows downward into rate-limit's warn logs and
+    // cedar's decision logs.
+    //
+    // Each binding only present on wasm32 (the `Env` shape differs in
+    // native tests — see build_state's cfg-gated arms). For native
+    // unit tests we just hit ConnectRpcService directly via the
+    // handlers, not through this stack.
+    // -----------------------------------------------------------------
+    let cf_tracing = tracing_layer::<worker::Body>();
+    let cf_metrics = metrics_layer(env.analytics_engine("AE")?);
+    let cf_rate_limit = rate_limit_observe_layer::<worker::Body>(env.get_binding("RL")?);
+
     let router = RpcRouter::new();
     let router = register_services(router, &state);
 
-    let mut svc = auth_layer.layer(cedar_layer.layer(ConnectRpcService::new(router)));
+    let mut svc = cf_tracing.layer(
+        cf_metrics.layer(
+            cf_rate_limit.layer(
+                auth_layer.layer(cedar_layer.layer(ConnectRpcService::new(router))),
+            ),
+        ),
+    );
     svc.call(req)
         .await
         .map_err(|e| worker::Error::RustError(format!("rpc dispatch: {e}")))

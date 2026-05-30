@@ -387,9 +387,49 @@ dependencies = [
  "bytes",
  "cedar-policy",
  "connectrpc",
+ "connectrpc-tower-kit",
  "http",
  "http-body",
  "http-body-util",
+ "pin-project-lite",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "connectrpc-cf-metrics"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "http",
+ "pin-project-lite",
+ "tower",
+ "tracing",
+ "web-time",
+]
+
+[[package]]
+name = "connectrpc-cf-rate-limit"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "connectrpc",
+ "connectrpc-tower-kit",
+ "futures",
+ "http",
+ "http-body",
+ "http-body-util",
+ "pin-project-lite",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "connectrpc-cf-tracing"
+version = "0.1.0"
+dependencies = [
+ "http",
  "pin-project-lite",
  "tower",
  "tracing",
@@ -409,6 +449,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "connectrpc-tower-kit"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "connectrpc",
+ "http",
+ "http-body",
+ "http-body-util",
+ "pin-project-lite",
+ "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -2329,6 +2383,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2564,6 +2628,7 @@ name = "workers-multitenant"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "async-trait",
  "base64",
  "buffa",
  "buffa-types",
@@ -2572,6 +2637,9 @@ dependencies = [
  "connectrpc",
  "connectrpc-build",
  "connectrpc-cedar",
+ "connectrpc-cf-metrics",
+ "connectrpc-cf-rate-limit",
+ "connectrpc-cf-tracing",
  "futures",
  "getrandom 0.2.17",
  "http",

@@ -46,11 +46,25 @@ bytes = { version = "1.5", features = ["serde"] }
 futures = "0.3"
 tower = { version = "0.5", features = ["util"] }
 
-# Cedar policy authz middleware. Path-deps the connectrpc-cedar crate at
-# the outer repo root so any change here triggers a recompile of both.
-# Once connectrpc-cedar publishes to crates.io / a git tag, swap to that.
+# Cedar policy authz middleware. Path-deps the connectrpc-cedar crate
+# inside its workspace so any change here triggers a recompile of both.
+# The path moved from "../../" → "../../crates/connectrpc-cedar" when
+# the outer repo became a Cargo workspace (see ../../MIDDLEWARES.md for
+# the family plan). Once connectrpc-cedar publishes to crates.io, swap.
 cedar-policy = "4"
-connectrpc-cedar = { path = "../../" }
+connectrpc-cedar = { path = "../../crates/connectrpc-cedar" }
+# CF-Workers-aware tracing layer (the cf-context family — uses request.cf
+# + cf-ray, no CF binding required). See ../../MIDDLEWARES.md.
+connectrpc-cf-tracing = { path = "../../crates/connectrpc-cf-tracing" }
+# CF Rate Limiting binding wrapper (cf-binding: Rate Limiting). Consumer
+# wires env.RL into a `RateLimiter` trait impl.
+connectrpc-cf-rate-limit = { path = "../../crates/connectrpc-cf-rate-limit" }
+# CF Analytics Engine binding wrapper (cf-binding: Analytics Engine).
+# Consumer wires env.AE into a `MetricSink` trait impl.
+connectrpc-cf-metrics = { path = "../../crates/connectrpc-cf-metrics" }
+# Used by our `RateLimiter` and `MetricSink` impls below. Re-export of
+# the crate the middleware crates themselves use, so versions stay aligned.
+async-trait = "0.1"
 tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
 

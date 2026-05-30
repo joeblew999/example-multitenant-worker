@@ -8,8 +8,13 @@
 //! helpers continue to enforce.
 //!
 //! After shadow mode runs cleanly in prod for N days, flip the layer's
-//! constructor to `enforce()` and delete `services::authz` (per
-//! `examples/multitenant-policies/ROADMAP.md` structural change A).
+//! constructor to `enforce()`. **Do NOT delete `services::authz`** —
+//! the handler-side `require_*` helpers stay as defense in depth and
+//! to cover body-field-specific checks the Layer can't see (e.g. an
+//! invitation token in the decoded request body). The earlier roadmap
+//! claim ("delete services::authz") was wrong; revised position lives
+//! in MIDDLEWARES.md §6 pattern 3 ("soft middleware + handler backstop")
+//! and the family plan in the top-level CLAUDE.md.
 
 use std::sync::Arc;
 
