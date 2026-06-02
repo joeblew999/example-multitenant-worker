@@ -230,3 +230,12 @@ Left out of the demo on purpose. Extension points noted where relevant:
   acceptance. If a non-batch sequence dies mid-flight (worker eviction),
   partial state is possible. The `consumed_nonces` table makes one-shot
   token state recoverable, but partial signups are best effort.
+
+## License
+
+This project is dedicated to the public domain under
+[CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/).
+To the extent possible under law, the author has waived all copyright and
+related or neighboring rights to this work. You may copy, modify,
+distribute, and use it, including for commercial purposes, all without
+asking permission. See the [LICENSE](LICENSE) file for the full text.
