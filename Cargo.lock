@@ -167,9 +167,9 @@ dependencies = [
 
 [[package]]
 name = "buffa"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7a22fed63b429c4928fd5ed18dcacd3a98d0df1f06cd7cf651b2bbf3dbf0500"
+checksum = "941c714734a660caa93a210c531dec553cc0ef417890409914d24032c94ab840"
 dependencies = [
  "base64",
  "bytes",
@@ -182,9 +182,9 @@ dependencies = [
 
 [[package]]
 name = "buffa-codegen"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd9774d97c281d07a61006775c675940371c170ae1b454de0e9c013e0acd19f6"
+checksum = "693ea91be01336fb0084b2e7bb071be7393224c72f737c846471e4013e58c327"
 dependencies = [
  "buffa",
  "buffa-descriptor",
@@ -197,18 +197,20 @@ dependencies = [
 
 [[package]]
 name = "buffa-descriptor"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7b942f9242ea5a79c92486460073a0a36cccc314e69fbc2ff08f55467c47b37"
+checksum = "ad8df83adfcb525621f5a96c88e610f90aff1112ec57522d9b48a943df327394"
 dependencies = [
  "buffa",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "buffa-types"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d406a92c781273688fa21eb2641b54b2cf4e6b52e4a1339fd12279b8220313c"
+checksum = "fc84fac1e7efc335e74934a4ebe0534a30411ec2ea6a5a17ed294201c6b3b23c"
 dependencies = [
  "buffa",
  "bytes",
@@ -344,10 +346,11 @@ dependencies = [
 
 [[package]]
 name = "connectrpc"
-version = "0.4.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55cb80f9eb09b593a96880eb1c2588ac6319b129519de8c672f9b8b4ffdeaece"
+checksum = "1da5e4adde184f69e64ef112c6f8b645afe9ff82466761f8fc348dbd36aaee7e"
 dependencies = [
+ "async-trait",
  "base64",
  "buffa",
  "bytes",
@@ -369,9 +372,9 @@ dependencies = [
 
 [[package]]
 name = "connectrpc-build"
-version = "0.4.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eec3203af15f7075997d16f8ea0a614bcad86879abe9f8ea70c4df69e74f3c14"
+checksum = "ef0a867ba86814d6a8f85e5784e1c89c2f3340c59f95625e0de97a587a4a1e4a"
 dependencies = [
  "anyhow",
  "buffa",
@@ -397,10 +400,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "connectrpc-cedar-interceptor"
+version = "0.1.0"
+dependencies = [
+ "cedar-policy",
+ "connectrpc",
+ "connectrpc-cedar",
+ "tracing",
+]
+
+[[package]]
 name = "connectrpc-cf-metrics"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "connectrpc",
  "http",
  "pin-project-lite",
  "tower",
@@ -437,9 +451,9 @@ dependencies = [
 
 [[package]]
 name = "connectrpc-codegen"
-version = "0.4.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77590b8d66a279f1741bc56bd358f82ce57f26f5a9576fbb8329bce30ea1e96e"
+checksum = "20923a890d45f23df73ad0af5d40b0a0784e7c43993d78a9264a1a1d03983a66"
 dependencies = [
  "anyhow",
  "buffa",
@@ -2637,6 +2651,7 @@ dependencies = [
  "connectrpc",
  "connectrpc-build",
  "connectrpc-cedar",
+ "connectrpc-cedar-interceptor",
  "connectrpc-cf-metrics",
  "connectrpc-cf-rate-limit",
  "connectrpc-cf-tracing",

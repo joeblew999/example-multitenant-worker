@@ -92,7 +92,7 @@ fn extract_bearer(s: &str) -> Option<&str> {
 /// Convenience for handlers: pluck the verified `SessionContext` from
 /// `RequestContext.extensions` or fail with `Code::Unauthenticated`.
 pub fn require_session(ctx: &connectrpc::RequestContext) -> Result<SessionContext, ConnectError> {
-    ctx.extensions
+    ctx.extensions()
         .get::<SessionContext>()
         .cloned()
         .ok_or_else(|| ConnectError::unauthenticated("session token required"))

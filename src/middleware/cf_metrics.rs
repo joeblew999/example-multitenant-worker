@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use connectrpc_cf_metrics::{MetricSink, MetricsLayer};
+use connectrpc_cf_metrics::{MetricSink, MetricsInterceptor, MetricsLayer};
 use worker::AnalyticsEngineDataset;
 
 /// Adapter from `worker::AnalyticsEngineDataset` → the crate's `MetricSink`
@@ -96,6 +96,19 @@ fn write_point(
 /// Build the metrics layer. Default metric names
 /// (`rpc_requests_total`, `rpc_latency_ms`) are fine; can override via
 /// the builder methods if a downstream dashboard expects different names.
+///
+/// Kept for non-connectrpc tower stacks; this worker now wires the
+/// interceptor below instead (see [`metrics_interceptor`]).
 pub fn metrics_layer(binding: AnalyticsEngineDataset) -> MetricsLayer<AeMetricSink> {
     MetricsLayer::new(AeMetricSink(Arc::new(binding)))
+}
+
+/// Build the metrics INTERCEPTOR (`connectrpc::Interceptor` surface).
+/// Same `AeMetricSink` as [`metrics_layer`] — register on the service
+/// with `.with_interceptor(..)`. Preferred for this connectrpc worker:
+/// the `procedure` label comes from `Spec::procedure` (proto-qualified)
+/// and `status_class` from the typed `Result<_, ConnectError>` rather
+/// than from sniffing the HTTP response status.
+pub fn metrics_interceptor(binding: AnalyticsEngineDataset) -> MetricsInterceptor<AeMetricSink> {
+    MetricsInterceptor::new(AeMetricSink(Arc::new(binding)))
 }

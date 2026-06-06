@@ -19,9 +19,9 @@
 use std::sync::Arc;
 
 use cedar_policy::{Context, EntityUid, RestrictedExpression};
-use connectrpc_cedar::{
-    CedarAuthorizer, CedarLayer, CedarRequest, action::action_from_path,
-};
+use connectrpc::UnaryRequest;
+use connectrpc_cedar::{CedarAuthorizer, CedarRequest, action::action_from_path};
+use connectrpc_cedar_interceptor::CedarInterceptor;
 
 use crate::auth::SessionContext;
 use crate::domain::Role;
@@ -43,17 +43,20 @@ pub fn build_authorizer() -> Arc<CedarAuthorizer> {
     )
 }
 
-/// Build the CedarLayer for this worker in **shadow mode**.
+/// Build the Cedar **interceptor** for this worker in **shadow mode**.
 ///
-/// `B` is the request body type (typically `worker::Body` aka
-/// `http::body::Body` for wasm32, but stays generic so unit tests can
-/// use a different body without redefining the extractor).
-pub fn shadow_layer<B: 'static>(
+/// Registered on the `ConnectRpcService` via `.with_interceptor(..)`. It
+/// runs after envelope decode, so the extractor reads `SessionContext`
+/// from `ctx.extensions()` (copied there from the AuthLayer) and could
+/// additionally read the decoded request body for body-aware rules.
+/// Shadow mode logs every decision and always passes through;
+/// `services::authz::require_*` stays as the enforcing backstop.
+pub fn shadow_interceptor(
     authorizer: Arc<CedarAuthorizer>,
-) -> CedarLayer<
-    impl Fn(&http::Request<B>) -> Option<CedarRequest> + Clone + Send + Sync + 'static,
+) -> CedarInterceptor<
+    impl Fn(&UnaryRequest) -> Option<CedarRequest> + Clone + Send + Sync + 'static,
 > {
-    CedarLayer::shadow(authorizer, |req: &http::Request<B>| extract_cedar_request(req))
+    CedarInterceptor::shadow(authorizer, |req: &UnaryRequest| extract_cedar_request_ctx(req))
         .skip_paths([
             // Public routes that AuthLayer doesn't gate either.
             "/healthz",
@@ -62,19 +65,27 @@ pub fn shadow_layer<B: 'static>(
         ])
 }
 
-/// Maps `SessionContext` + URL path into a CedarRequest.
+/// Interceptor-surface extractor: pull `SessionContext` + RPC path out of
+/// the decoded request's `RequestContext`, then build the Cedar tuple.
+/// Body-aware decisions would additionally read
+/// `req.payload.message::<T>()` here.
+fn extract_cedar_request_ctx(req: &UnaryRequest) -> Option<CedarRequest> {
+    let session = req.ctx.extensions().get::<SessionContext>()?;
+    let path = req.ctx.path()?;
+    build_cedar_request(session, path)
+}
+
+/// Maps `SessionContext` + RPC path into a CedarRequest.
 ///
 /// Returns `None` when:
 /// - No `SessionContext` in extensions (anonymous endpoint — login, signup, etc.)
-/// - URL path doesn't match a ConnectRPC service/method shape
+/// - RPC path doesn't match a ConnectRPC service/method shape
 /// - Action belongs to a service whose resource lives in the request
 ///   body (Invitation actions targeting a specific token, etc.). For
 ///   those, the existing handler-side `require_*` keeps enforcing
 ///   until we add a `require_authorized(ctx, action, resource)` helper
 ///   in a later commit.
-fn extract_cedar_request<B>(req: &http::Request<B>) -> Option<CedarRequest> {
-    let session = req.extensions().get::<SessionContext>()?;
-    let path = req.uri().path();
+fn build_cedar_request(session: &SessionContext, path: &str) -> Option<CedarRequest> {
     let action = action_from_path(path)?;
 
     // Resource derivation by service.

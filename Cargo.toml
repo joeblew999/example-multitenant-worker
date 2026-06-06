@@ -12,11 +12,11 @@ crate-type = ["cdylib", "rlib"]
 worker = { version = "0.8", features = ["http", "d1"] }
 worker-macros = { version = "0.8", features = ["http"] }
 
-connectrpc = { version = "0.4", default-features = false }
+connectrpc = { version = "0.6", default-features = false }
 
 # Protobuf runtime used by generated code.
-buffa = { version = "0.5", features = ["json"] }
-buffa-types = { version = "0.5", features = ["json"] }
+buffa = { version = "0.6", features = ["json"] }
+buffa-types = { version = "0.6", features = ["json"] }
 
 # Macaroons for every auth artifact (sessions + one-shot tokens).
 libmacaroon = { version = "0.2", features = ["wasm"], default-features = false }
@@ -53,6 +53,11 @@ tower = { version = "0.5", features = ["util"] }
 # the family plan). Once connectrpc-cedar publishes to crates.io, swap.
 cedar-policy = "4"
 connectrpc-cedar = { path = "../../crates/connectrpc-cedar" }
+# Cedar authz on the connectrpc::Interceptor surface (body-aware; runs
+# after envelope decode). This worker uses the INTERCEPTOR for cedar +
+# metrics now that connectrpc 0.6 ships the Interceptor trait; the Layer
+# crates remain for non-connectrpc tower stacks. See ../../MIDDLEWARES.md.
+connectrpc-cedar-interceptor = { path = "../../crates/connectrpc-cedar-interceptor" }
 # CF-Workers-aware tracing layer (the cf-context family — uses request.cf
 # + cf-ray, no CF binding required). See ../../MIDDLEWARES.md.
 connectrpc-cf-tracing = { path = "../../crates/connectrpc-cf-tracing" }
@@ -75,7 +80,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
-connectrpc-build = { version = "0.4" }
+connectrpc-build = { version = "0.6" }
 
 [dev-dependencies]
 futures = "0.3"

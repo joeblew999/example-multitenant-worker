@@ -31,8 +31,8 @@ pub mod time;
 use crate::auth::Keyring;
 use crate::billing::BillingProvider;
 use crate::middleware::{
-    AuthLayer, build_authorizer, metrics_layer, rate_limit_observe_layer, shadow_layer,
-    tracing_layer,
+    AuthLayer, build_authorizer, metrics_interceptor, rate_limit_observe_layer,
+    shadow_interceptor, tracing_layer,
 };
 use crate::proto::workers::auth::v1::AuthServiceExt;
 use crate::proto::workers::billing::v1::BillingServiceExt;
@@ -62,55 +62,56 @@ async fn fetch(
     let state = build_state(&env).await?;
     let auth_layer = AuthLayer::new(Arc::clone(&state.keyring), Arc::clone(&state.clock));
 
-    // CedarLayer in shadow mode: evaluates every request, logs the
-    // decision, never rejects. The hand-rolled `services::authz::require_*`
-    // helpers still enforce — they're the source of truth until shadow
-    // mode runs cleanly in prod for N days. See KUMO.md style of
-    // separation between the two layers in CLAUDE.md and the rollout
-    // plan in examples/multitenant-policies/ROADMAP.md.
+    // Cedar authz as a connectrpc Interceptor in shadow mode: evaluates
+    // every dispatched RPC, logs the decision, never rejects. The
+    // hand-rolled `services::authz::require_*` helpers still enforce —
+    // source of truth until shadow runs clean in prod for N days. See the
+    // family plan in CLAUDE.md / MIDDLEWARES.md.
     let cedar_authorizer = build_authorizer();
-    let cedar_layer = shadow_layer::<worker::Body>(Arc::clone(&cedar_authorizer));
+    let cedar_interceptor = shadow_interceptor(Arc::clone(&cedar_authorizer));
 
     // -----------------------------------------------------------------
-    // CF observability + abuse stack (outside-in):
+    // Two-tier middleware stack (outside-in):
     //
-    //   cf_tracing       — outermost; span wraps everything below so
+    //   TOWER LAYERS (wrap the whole service, run BEFORE envelope decode):
+    //     cf_tracing     — outermost; span wraps everything below so
     //                      every event downstream carries cf.* fields
-    //   cf_metrics       — counter + latency for the full request
-    //                      including all middleware overhead, written
-    //                      to Analytics Engine
-    //   cf_rate_limit    — rejects abuse BEFORE any auth/DB work
-    //                      (per-IP via cf-connecting-ip; Mode::Observe
-    //                      until logs confirm key derivation)
-    //   auth_layer       — extracts session if present
-    //   cedar_layer      — path-based authz (Mode::Shadow)
-    //   ConnectRpcService — innermost; the actual dispatch
+    //     cf_rate_limit  — rejects abuse before any auth/decode work
+    //                      (per-IP; Mode::Observe until logs confirm keys)
+    //     auth_layer     — extracts session into http extensions
     //
-    // Order matters: rate-limit on TOP of auth so we can throttle
-    // anonymous floods cheaply. Metrics on top of rate-limit so 429s
-    // get counted (status_class=4xx). Tracing on top of everything so
-    // its span context flows downward into rate-limit's warn logs and
-    // cedar's decision logs.
+    //   CONNECTRPC INTERCEPTORS (run INSIDE dispatch, after decode):
+    //     metrics        — counter + latency per dispatched RPC, labelled
+    //                      with Spec::procedure + a typed status_class
+    //     cedar          — path/body-aware authz (Mode::Shadow); reads the
+    //                      SessionContext auth_layer copied into ctx.extensions
     //
-    // Each binding only present on wasm32 (the `Env` shape differs in
-    // native tests — see build_state's cfg-gated arms). For native
-    // unit tests we just hit ConnectRpcService directly via the
-    // handlers, not through this stack.
+    // Interceptor order: metrics registered first = outermost, so it times
+    // the cedar interceptor + handler together; cedar registered second =
+    // innermost, runs immediately before the handler.
+    //
+    // Tradeoff vs the old all-tower stack: rate-limit 429s are rejected at
+    // the tower layer BEFORE dispatch, so they no longer flow through the
+    // metrics interceptor (which only sees dispatched RPCs). That buys
+    // Spec-accurate per-RPC labels; transport-level rejections stay visible
+    // via cf_rate_limit's own observe logs.
+    //
+    // Each binding only present on wasm32 (Env shape differs in native
+    // tests — see build_state's cfg-gated arms). Native unit tests hit the
+    // handlers directly, not through this stack.
     // -----------------------------------------------------------------
     let cf_tracing = tracing_layer::<worker::Body>();
-    let cf_metrics = metrics_layer(env.analytics_engine("AE")?);
+    let metrics = metrics_interceptor(env.analytics_engine("AE")?);
     let cf_rate_limit = rate_limit_observe_layer::<worker::Body>(env.get_binding("RL")?);
 
     let router = RpcRouter::new();
     let router = register_services(router, &state);
 
-    let mut svc = cf_tracing.layer(
-        cf_metrics.layer(
-            cf_rate_limit.layer(
-                auth_layer.layer(cedar_layer.layer(ConnectRpcService::new(router))),
-            ),
-        ),
-    );
+    let service = ConnectRpcService::new(router)
+        .with_interceptor(metrics)
+        .with_interceptor(cedar_interceptor);
+
+    let mut svc = cf_tracing.layer(cf_rate_limit.layer(auth_layer.layer(service)));
     svc.call(req)
         .await
         .map_err(|e| worker::Error::RustError(format!("rpc dispatch: {e}")))
@@ -247,7 +248,7 @@ mod tests {
 
     fn ctx_with_session(session: crate::auth::SessionContext) -> RpcContext {
         let mut ctx = RpcContext::default();
-        ctx.extensions.insert(session);
+        ctx.extensions_mut().insert(session);
         ctx
     }
 
