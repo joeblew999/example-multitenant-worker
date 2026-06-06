@@ -75,9 +75,9 @@ impl FromStr for ScopeKind {
     }
 }
 
-/// How the current session was authenticated. Encoded as a caveat
-/// (`auth_method=password` or `auth_method=sso:<idp_id>`) so that scope-entry
-/// time can compare against an SSO-required scope.
+/// How the current session was authenticated. Encoded in the signed token
+/// claims as `password` or `sso:<idp_id>` so that scope-entry time can compare
+/// against an SSO-required scope.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AuthMethod {
     Password,
@@ -193,8 +193,8 @@ impl ScopeTarget {
     }
 }
 
-/// `purpose=` caveat values for the four kinds of macaroon this service
-/// mints. Verification rejects a token whose purpose doesn't match.
+/// `purpose` claim values for the four kinds of macaroon this service mints.
+/// Verification rejects a token whose purpose doesn't match.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TokenPurpose {
     Session,

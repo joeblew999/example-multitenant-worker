@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package workers.auth.v1;
+
+// Immutable, signed claims for an issued token.
+//
+// These are serialized (buffa/protobuf) and placed in the macaroon
+// *identifier*, which is folded into the root signature
+// (sig0 = HMAC(root_key, identifier)). Unlike first-party caveats — which
+// ANY holder of a token can append without the root key — the identifier
+// cannot be altered without invalidating the signature. Every
+// authority-bearing fact therefore lives here, never in a caveat.
+//
+// Expiry is the sole exception and lives in an `exp=<unix>` first-party
+// caveat, because it is a genuinely-attenuating constraint: a holder may
+// append a *tighter* (earlier) expiry, and the effective expiry is the
+// earliest one. Verification rejects any caveat other than `exp`.
+message TokenClaims {
+  // Discriminates the four token kinds: "session", "invitation",
+  // "password_reset", "email_verify". Checked on every verify path.
+  string purpose = 1;
+  // One-shot binding consumed at the use RPC (invitation / password_reset /
+  // email_verify). Empty for sessions.
+  string nonce = 2;
+
+  // --- session / one-shot subject ---
+  string user_id = 10;
+  string email = 11;             // session email, or invited email
+  string billing_account_id = 12;
+  string org_id = 13;            // empty = none
+  string role = 14;              // "owner" | "member"
+  string auth_method = 15;       // "password" | "sso:<idp>"
+
+  // --- invitation ---
+  string invitation_id = 20;
+  string scope_kind = 21;        // "billing" | "org"
+  string scope_id = 22;
+  string required_idp = 23;      // empty = none
+}

@@ -2,6 +2,7 @@ fn main() {
     connectrpc_build::Config::new()
         .files(&[
             "proto/workers/auth/v1/auth.proto",
+            "proto/workers/auth/v1/token.proto",
             "proto/workers/billing/v1/billing.proto",
             "proto/workers/org/v1/org.proto",
             "proto/workers/invitation/v1/invitation.proto",

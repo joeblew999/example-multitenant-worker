@@ -1,20 +1,37 @@
 //! Mint / verify the four kinds of macaroon this service issues.
 //!
-//! All tokens carry:
-//!   - `purpose=<session|invitation|password_reset|email_verify>`
-//!   - `exp=<unix_seconds>`
+//! # Security model
 //!
-//! Session tokens additionally carry user / scope / role / auth_method
-//! caveats. One-shot tokens carry a `nonce` consumed via `Repo::consume_nonce`
-//! at the use RPC.
+//! Every authority-bearing claim (user, role, billing/org scope, purpose,
+//! expiry, one-shot nonce, ...) is packed into a signed [`TokenClaims`]
+//! protobuf message that becomes the macaroon **identifier**. The identifier
+//! is folded into the root signature (`sig0 = HMAC(root_key, identifier)`),
+//! so no holder can alter a claim without the root key.
 //!
-//! Verification is pure (no DB reads). The use RPC stamps the nonce.
+//! Caveats are deliberately NOT used to carry claims. A first-party caveat
+//! can be appended by anyone holding a token — that is the defining macaroon
+//! property — so caveats can only ever *attenuate*, never assert authority.
+//! The previous design stored identity in caveats and read it back, which let
+//! any token holder append `role=owner` / `user=<victim>` / `billing=<other>`
+//! and silently escalate.
+//!
+//! The single legitimate caveat is `exp=<unix>`: expiry genuinely attenuates,
+//! so a holder may append an *earlier* expiry and the effective expiry is the
+//! earliest one (it can never be extended — appending a later `exp` is ignored
+//! because we take the minimum). The verifier registers exactly one satisfier,
+//! for well-formed `exp` caveats, so any *other* caveat (e.g. one an attacker
+//! appended) is unsatisfied and verification fails.
+//!
+//! Verification is pure (no DB reads). One-shot tokens additionally carry a
+//! `nonce` consumed via `Repo::consume_nonce` at the use RPC.
 
+use buffa::Message as _;
 use libmacaroon::{Caveat, Format, Macaroon, MacaroonError, Verifier};
 
 use crate::domain::{
     AuthMethod, BillingAccountId, InvitationId, OrgId, Role, ScopeKind, TokenPurpose, UserId,
 };
+use crate::proto::workers::auth::v1::TokenClaims;
 
 use super::keyring::Keyring;
 use super::session::SessionContext;
@@ -28,8 +45,12 @@ pub enum TokenError {
         expected: TokenPurpose,
         found: String,
     },
-    MissingCaveat(&'static str),
-    InvalidCaveat(String),
+    MissingClaim(&'static str),
+    InvalidClaim(String),
+    /// The token carried a caveat. Well-formed tokens have none; a present
+    /// caveat means it was appended after minting (tampering) and the token
+    /// is rejected.
+    UnexpectedCaveat(String),
 }
 
 impl std::fmt::Display for TokenError {
@@ -41,8 +62,9 @@ impl std::fmt::Display for TokenError {
             TokenError::WrongPurpose { expected, found } => {
                 write!(f, "wrong token purpose: expected {expected}, got {found}")
             }
-            TokenError::MissingCaveat(c) => write!(f, "missing caveat: {c}"),
-            TokenError::InvalidCaveat(c) => write!(f, "invalid caveat: {c}"),
+            TokenError::MissingClaim(c) => write!(f, "missing claim: {c}"),
+            TokenError::InvalidClaim(c) => write!(f, "invalid claim: {c}"),
+            TokenError::UnexpectedCaveat(c) => write!(f, "unexpected caveat on token: {c}"),
         }
     }
 }
@@ -53,27 +75,89 @@ impl From<MacaroonError> for TokenError {
     fn from(e: MacaroonError) -> Self {
         match e {
             MacaroonError::InvalidSignature => TokenError::InvalidSignature,
-            MacaroonError::CaveatNotSatisfied(s) => TokenError::InvalidCaveat(s),
+            // The verifier registers no satisfiers, so any caveat present on
+            // the token surfaces here — that only happens if a caveat was
+            // appended post-mint.
+            MacaroonError::CaveatNotSatisfied(s) => TokenError::UnexpectedCaveat(s),
             MacaroonError::DeserializationError(s) => TokenError::Malformed(s),
             other => TokenError::Malformed(other.to_string()),
         }
     }
 }
 
-fn cv(prefix: &str, value: impl AsRef<str>) -> String {
-    format!("{prefix}={}", value.as_ref())
+const EXP_PREFIX: &[u8] = b"exp=";
+
+/// Serialize signed claims into the macaroon identifier and add the `exp`
+/// caveat. The token carries no other caveats.
+fn pack(keyring: &Keyring, claims: &TokenClaims, exp_unix: i64) -> Result<String, TokenError> {
+    let mut mac = Macaroon::create(
+        Some("workers-multitenant"),
+        keyring.root(),
+        claims.encode_to_vec(),
+    )?;
+    mac.add_first_party_caveat(format!("exp={exp_unix}"))?;
+    Ok(mac.serialize(Format::V2)?)
 }
 
-fn parse_caveat<'a>(c: &'a Caveat, prefix: &str) -> Option<&'a str> {
-    match c {
-        Caveat::FirstParty(fp) => {
-            let p = fp.predicate();
-            std::str::from_utf8(p)
-                .ok()
-                .and_then(|s| s.strip_prefix(prefix))
-        }
-        Caveat::ThirdParty(_) => None,
+/// A caveat is satisfiable iff it is a well-formed `exp=<i64>`. Everything
+/// else (including anything an attacker appends) is left unsatisfied, so the
+/// verifier rejects the token.
+fn parse_exp(caveat: &[u8]) -> Option<i64> {
+    let rest = caveat.strip_prefix(EXP_PREFIX)?;
+    std::str::from_utf8(rest).ok()?.parse::<i64>().ok()
+}
+
+/// Verify the signature, reject any non-`exp` caveat, enforce expiry, and
+/// recover the signed claims. Effective expiry is the EARLIEST `exp` caveat,
+/// so attenuation can only shorten a token's life, never extend it.
+fn unpack(
+    keyring: &Keyring,
+    now_unix: i64,
+    token: &str,
+) -> Result<(TokenClaims, i64), TokenError> {
+    let macaroon = Macaroon::deserialize(token)?;
+    let mut verifier = Verifier::default();
+    verifier.satisfy_general(|c: &[u8]| parse_exp(c).is_some());
+    verifier.verify(&macaroon, keyring.root(), &[])?;
+
+    let exp_unix = macaroon
+        .caveats()
+        .iter()
+        .filter_map(|c| match c {
+            Caveat::FirstParty(fp) => parse_exp(fp.predicate()),
+            Caveat::ThirdParty(_) => None,
+        })
+        .min()
+        .ok_or(TokenError::MissingClaim("exp"))?;
+    if exp_unix <= now_unix {
+        return Err(TokenError::Expired);
     }
+
+    let claims = TokenClaims::decode_from_slice(macaroon.identifier())
+        .map_err(|e| TokenError::Malformed(format!("claims decode: {e}")))?;
+    Ok((claims, exp_unix))
+}
+
+fn check_purpose(claims: &TokenClaims, expected: TokenPurpose) -> Result<(), TokenError> {
+    if claims.purpose != expected.as_str() {
+        return Err(TokenError::WrongPurpose {
+            expected,
+            found: claims.purpose.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn require<'a>(value: &'a str, claim: &'static str) -> Result<&'a str, TokenError> {
+    if value.is_empty() {
+        Err(TokenError::MissingClaim(claim))
+    } else {
+        Ok(value)
+    }
+}
+
+fn optional(value: &str) -> Option<&str> {
+    if value.is_empty() { None } else { Some(value) }
 }
 
 #[derive(Clone, Debug)]
@@ -89,23 +173,17 @@ pub struct MintSessionInput<'a> {
 }
 
 pub fn mint_session(keyring: &Keyring, input: MintSessionInput<'_>) -> Result<String, TokenError> {
-    let exp = input.now_unix + input.ttl_seconds;
-    let mut mac = Macaroon::create(
-        Some("workers-multitenant"),
-        keyring.root(),
-        format!("session:{}", input.user_id),
-    )?;
-    mac.add_first_party_caveat(cv("purpose", TokenPurpose::Session.as_str()))?
-        .add_first_party_caveat(cv("user", input.user_id.as_str()))?
-        .add_first_party_caveat(cv("email", input.email))?
-        .add_first_party_caveat(cv("billing", input.billing.as_str()))?
-        .add_first_party_caveat(cv("role", input.role.as_str()))?
-        .add_first_party_caveat(cv("auth_method", input.auth_method.encode()))?
-        .add_first_party_caveat(cv("exp", exp.to_string()))?;
-    if let Some(org) = input.org {
-        mac.add_first_party_caveat(cv("org", org.as_str()))?;
-    }
-    Ok(mac.serialize(Format::V2)?)
+    let claims = TokenClaims {
+        purpose: TokenPurpose::Session.as_str().to_owned(),
+        user_id: input.user_id.as_str().to_owned(),
+        email: input.email.to_owned(),
+        billing_account_id: input.billing.as_str().to_owned(),
+        org_id: input.org.map(|o| o.as_str().to_owned()).unwrap_or_default(),
+        role: input.role.as_str().to_owned(),
+        auth_method: input.auth_method.encode(),
+        ..Default::default()
+    };
+    pack(keyring, &claims, input.now_unix + input.ttl_seconds)
 }
 
 pub fn verify_session(
@@ -113,91 +191,25 @@ pub fn verify_session(
     now_unix: i64,
     token: &str,
 ) -> Result<SessionContext, TokenError> {
-    let macaroon = Macaroon::deserialize(token)?;
-    let mut verifier = Verifier::default();
-    register_session_satisfiers(&mut verifier, now_unix);
-    verifier.verify(&macaroon, keyring.root(), &[])?;
+    let (claims, exp_unix) = unpack(keyring, now_unix, token)?;
+    check_purpose(&claims, TokenPurpose::Session)?;
 
-    let mut user: Option<UserId> = None;
-    let mut email: Option<String> = None;
-    let mut billing: Option<BillingAccountId> = None;
-    let mut org: Option<OrgId> = None;
-    let mut role: Option<Role> = None;
-    let mut auth_method: Option<AuthMethod> = None;
-    let mut exp_unix: Option<i64> = None;
-    let mut purpose: Option<String> = None;
-
-    for c in macaroon.caveats() {
-        if let Some(v) = parse_caveat(c, "purpose=") {
-            purpose = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "user=") {
-            user = Some(UserId::from(v));
-        } else if let Some(v) = parse_caveat(c, "email=") {
-            email = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "billing=") {
-            billing = Some(BillingAccountId::from(v));
-        } else if let Some(v) = parse_caveat(c, "org=") {
-            org = Some(OrgId::from(v));
-        } else if let Some(v) = parse_caveat(c, "role=") {
-            role = v.parse().map(Some).map_err(TokenError::InvalidCaveat)?;
-        } else if let Some(v) = parse_caveat(c, "auth_method=") {
-            auth_method = Some(
-                AuthMethod::decode(v)
-                    .ok_or_else(|| TokenError::InvalidCaveat(format!("auth_method={v}")))?,
-            );
-        } else if let Some(v) = parse_caveat(c, "exp=") {
-            exp_unix = Some(
-                v.parse()
-                    .map_err(|_| TokenError::InvalidCaveat(format!("exp={v}")))?,
-            );
-        }
-    }
-
-    let purpose = purpose.ok_or(TokenError::MissingCaveat("purpose"))?;
-    if purpose != TokenPurpose::Session.as_str() {
-        return Err(TokenError::WrongPurpose {
-            expected: TokenPurpose::Session,
-            found: purpose,
-        });
-    }
+    let role = claims
+        .role
+        .parse::<Role>()
+        .map_err(TokenError::InvalidClaim)?;
+    let auth_method = AuthMethod::decode(&claims.auth_method)
+        .ok_or_else(|| TokenError::InvalidClaim(format!("auth_method={}", claims.auth_method)))?;
 
     Ok(SessionContext {
-        user: user.ok_or(TokenError::MissingCaveat("user"))?,
-        email: email.ok_or(TokenError::MissingCaveat("email"))?,
-        billing: billing.ok_or(TokenError::MissingCaveat("billing"))?,
-        org,
-        role: role.ok_or(TokenError::MissingCaveat("role"))?,
-        auth_method: auth_method.ok_or(TokenError::MissingCaveat("auth_method"))?,
-        exp_unix: exp_unix.ok_or(TokenError::MissingCaveat("exp"))?,
+        user: UserId::from(require(&claims.user_id, "user")?),
+        email: require(&claims.email, "email")?.to_owned(),
+        billing: BillingAccountId::from(require(&claims.billing_account_id, "billing")?),
+        org: optional(&claims.org_id).map(OrgId::from),
+        role,
+        auth_method,
+        exp_unix,
     })
-}
-
-fn register_session_satisfiers(verifier: &mut Verifier, now_unix: i64) {
-    verifier.satisfy_exact(cv("purpose", TokenPurpose::Session.as_str()));
-    verifier.satisfy_general(prefix_satisfier(b"user="));
-    verifier.satisfy_general(prefix_satisfier(b"email="));
-    verifier.satisfy_general(prefix_satisfier(b"billing="));
-    verifier.satisfy_general(prefix_satisfier(b"org="));
-    verifier.satisfy_general(prefix_satisfier(b"role="));
-    verifier.satisfy_general(prefix_satisfier(b"auth_method="));
-    verifier.satisfy_general(move |c: &[u8]| exp_satisfier(c, now_unix));
-}
-
-fn prefix_satisfier(prefix: &'static [u8]) -> impl Fn(&[u8]) -> bool + Send + Sync + 'static {
-    move |c: &[u8]| c.starts_with(prefix)
-}
-
-fn exp_satisfier(caveat: &[u8], now_unix: i64) -> bool {
-    let Some(rest) = caveat.strip_prefix(b"exp=") else {
-        return false;
-    };
-    let Ok(text) = std::str::from_utf8(rest) else {
-        return false;
-    };
-    let Ok(when) = text.parse::<i64>() else {
-        return false;
-    };
-    when > now_unix
 }
 
 #[derive(Clone, Debug)]
@@ -217,24 +229,18 @@ pub fn mint_invitation(
     keyring: &Keyring,
     input: MintInvitationInput<'_>,
 ) -> Result<String, TokenError> {
-    let exp = input.now_unix + input.ttl_seconds;
-    let mut mac = Macaroon::create(
-        Some("workers-multitenant"),
-        keyring.root(),
-        format!("invitation:{}", input.invitation_id),
-    )?;
-    mac.add_first_party_caveat(cv("purpose", TokenPurpose::Invitation.as_str()))?
-        .add_first_party_caveat(cv("invitation_id", input.invitation_id.as_str()))?
-        .add_first_party_caveat(cv("email", input.email))?
-        .add_first_party_caveat(cv("scope_kind", input.scope_kind.as_str()))?
-        .add_first_party_caveat(cv("scope_id", input.scope_id))?
-        .add_first_party_caveat(cv("role", input.role.as_str()))?
-        .add_first_party_caveat(cv("nonce", input.nonce))?
-        .add_first_party_caveat(cv("exp", exp.to_string()))?;
-    if let Some(idp) = input.required_idp {
-        mac.add_first_party_caveat(cv("required_idp", idp))?;
-    }
-    Ok(mac.serialize(Format::V2)?)
+    let claims = TokenClaims {
+        purpose: TokenPurpose::Invitation.as_str().to_owned(),
+        nonce: input.nonce.to_owned(),
+        email: input.email.to_owned(),
+        invitation_id: input.invitation_id.as_str().to_owned(),
+        scope_kind: input.scope_kind.as_str().to_owned(),
+        scope_id: input.scope_id.to_owned(),
+        role: input.role.as_str().to_owned(),
+        required_idp: input.required_idp.unwrap_or_default().to_owned(),
+        ..Default::default()
+    };
+    pack(keyring, &claims, input.now_unix + input.ttl_seconds)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -254,75 +260,27 @@ pub fn verify_invitation(
     now_unix: i64,
     token: &str,
 ) -> Result<InvitationToken, TokenError> {
-    let macaroon = Macaroon::deserialize(token)?;
-    let mut verifier = Verifier::default();
-    verifier.satisfy_exact(cv("purpose", TokenPurpose::Invitation.as_str()));
-    for prefix in [
-        &b"invitation_id="[..],
-        &b"email="[..],
-        &b"scope_kind="[..],
-        &b"scope_id="[..],
-        &b"role="[..],
-        &b"nonce="[..],
-        &b"required_idp="[..],
-    ] {
-        verifier.satisfy_general(prefix_satisfier(prefix));
-    }
-    verifier.satisfy_general(move |c: &[u8]| exp_satisfier(c, now_unix));
-    verifier.verify(&macaroon, keyring.root(), &[])?;
+    let (claims, exp_unix) = unpack(keyring, now_unix, token)?;
+    check_purpose(&claims, TokenPurpose::Invitation)?;
 
-    let mut invitation_id: Option<InvitationId> = None;
-    let mut email: Option<String> = None;
-    let mut scope_kind: Option<ScopeKind> = None;
-    let mut scope_id: Option<String> = None;
-    let mut role: Option<Role> = None;
-    let mut required_idp: Option<String> = None;
-    let mut nonce: Option<String> = None;
-    let mut exp_unix: Option<i64> = None;
-    let mut purpose: Option<String> = None;
-
-    for c in macaroon.caveats() {
-        if let Some(v) = parse_caveat(c, "purpose=") {
-            purpose = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "invitation_id=") {
-            invitation_id = Some(InvitationId::from(v));
-        } else if let Some(v) = parse_caveat(c, "email=") {
-            email = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "scope_kind=") {
-            scope_kind = Some(v.parse().map_err(TokenError::InvalidCaveat)?);
-        } else if let Some(v) = parse_caveat(c, "scope_id=") {
-            scope_id = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "role=") {
-            role = Some(v.parse().map_err(TokenError::InvalidCaveat)?);
-        } else if let Some(v) = parse_caveat(c, "required_idp=") {
-            required_idp = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "nonce=") {
-            nonce = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "exp=") {
-            exp_unix = Some(
-                v.parse()
-                    .map_err(|_| TokenError::InvalidCaveat(format!("exp={v}")))?,
-            );
-        }
-    }
-
-    let purpose = purpose.ok_or(TokenError::MissingCaveat("purpose"))?;
-    if purpose != TokenPurpose::Invitation.as_str() {
-        return Err(TokenError::WrongPurpose {
-            expected: TokenPurpose::Invitation,
-            found: purpose,
-        });
-    }
+    let scope_kind = claims
+        .scope_kind
+        .parse::<ScopeKind>()
+        .map_err(TokenError::InvalidClaim)?;
+    let role = claims
+        .role
+        .parse::<Role>()
+        .map_err(TokenError::InvalidClaim)?;
 
     Ok(InvitationToken {
-        invitation_id: invitation_id.ok_or(TokenError::MissingCaveat("invitation_id"))?,
-        email: email.ok_or(TokenError::MissingCaveat("email"))?,
-        scope_kind: scope_kind.ok_or(TokenError::MissingCaveat("scope_kind"))?,
-        scope_id: scope_id.ok_or(TokenError::MissingCaveat("scope_id"))?,
-        role: role.ok_or(TokenError::MissingCaveat("role"))?,
-        required_idp,
-        nonce: nonce.ok_or(TokenError::MissingCaveat("nonce"))?,
-        exp_unix: exp_unix.ok_or(TokenError::MissingCaveat("exp"))?,
+        invitation_id: InvitationId::from(require(&claims.invitation_id, "invitation_id")?),
+        email: require(&claims.email, "email")?.to_owned(),
+        scope_kind,
+        scope_id: require(&claims.scope_id, "scope_id")?.to_owned(),
+        role,
+        required_idp: optional(&claims.required_idp).map(str::to_owned),
+        nonce: require(&claims.nonce, "nonce")?.to_owned(),
+        exp_unix,
     })
 }
 
@@ -354,17 +312,13 @@ fn mint_one_shot(
     now_unix: i64,
     ttl_seconds: i64,
 ) -> Result<String, TokenError> {
-    let exp = now_unix + ttl_seconds;
-    let mut mac = Macaroon::create(
-        Some("workers-multitenant"),
-        keyring.root(),
-        format!("{}:{user_id}", purpose.as_str()),
-    )?;
-    mac.add_first_party_caveat(cv("purpose", purpose.as_str()))?
-        .add_first_party_caveat(cv("user", user_id.as_str()))?
-        .add_first_party_caveat(cv("nonce", nonce))?
-        .add_first_party_caveat(cv("exp", exp.to_string()))?;
-    Ok(mac.serialize(Format::V2)?)
+    let claims = TokenClaims {
+        purpose: purpose.as_str().to_owned(),
+        nonce: nonce.to_owned(),
+        user_id: user_id.as_str().to_owned(),
+        ..Default::default()
+    };
+    pack(keyring, &claims, now_unix + ttl_seconds)
 }
 
 fn verify_one_shot(
@@ -373,44 +327,12 @@ fn verify_one_shot(
     now_unix: i64,
     token: &str,
 ) -> Result<OneShotFields, TokenError> {
-    let macaroon = Macaroon::deserialize(token)?;
-    let mut verifier = Verifier::default();
-    verifier.satisfy_exact(cv("purpose", expected.as_str()));
-    verifier.satisfy_general(prefix_satisfier(b"user="));
-    verifier.satisfy_general(prefix_satisfier(b"nonce="));
-    verifier.satisfy_general(move |c: &[u8]| exp_satisfier(c, now_unix));
-    verifier.verify(&macaroon, keyring.root(), &[])?;
-
-    let mut user_id: Option<UserId> = None;
-    let mut nonce: Option<String> = None;
-    let mut exp_unix: Option<i64> = None;
-    let mut purpose: Option<String> = None;
-
-    for c in macaroon.caveats() {
-        if let Some(v) = parse_caveat(c, "purpose=") {
-            purpose = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "user=") {
-            user_id = Some(UserId::from(v));
-        } else if let Some(v) = parse_caveat(c, "nonce=") {
-            nonce = Some(v.into());
-        } else if let Some(v) = parse_caveat(c, "exp=") {
-            exp_unix = Some(
-                v.parse()
-                    .map_err(|_| TokenError::InvalidCaveat(format!("exp={v}")))?,
-            );
-        }
-    }
-    let purpose = purpose.ok_or(TokenError::MissingCaveat("purpose"))?;
-    if purpose != expected.as_str() {
-        return Err(TokenError::WrongPurpose {
-            expected,
-            found: purpose,
-        });
-    }
+    let (claims, exp_unix) = unpack(keyring, now_unix, token)?;
+    check_purpose(&claims, expected)?;
     Ok(OneShotFields {
-        user_id: user_id.ok_or(TokenError::MissingCaveat("user"))?,
-        nonce: nonce.ok_or(TokenError::MissingCaveat("nonce"))?,
-        exp_unix: exp_unix.ok_or(TokenError::MissingCaveat("exp"))?,
+        user_id: UserId::from(require(&claims.user_id, "user")?),
+        nonce: require(&claims.nonce, "nonce")?.to_owned(),
+        exp_unix,
     })
 }
 
@@ -482,6 +404,25 @@ mod tests {
         Keyring::dev_default()
     }
 
+    fn sample_session(kr: &Keyring, now_unix: i64, ttl_seconds: i64) -> String {
+        let user = UserId::from("u_1");
+        let billing = BillingAccountId::from("ba_1");
+        mint_session(
+            kr,
+            MintSessionInput {
+                user_id: &user,
+                email: "ada@example.com",
+                billing: &billing,
+                org: None,
+                role: Role::Member,
+                auth_method: &AuthMethod::Password,
+                now_unix,
+                ttl_seconds,
+            },
+        )
+        .unwrap()
+    }
+
     #[test]
     fn session_roundtrip() {
         let kr = keyring();
@@ -512,45 +453,18 @@ mod tests {
     #[test]
     fn session_rejects_after_expiry() {
         let kr = keyring();
-        let user = UserId::from("u_2");
-        let billing = BillingAccountId::from("ba_2");
-        let token = mint_session(
-            &kr,
-            MintSessionInput {
-                user_id: &user,
-                email: "x@y",
-                billing: &billing,
-                org: None,
-                role: Role::Member,
-                auth_method: &AuthMethod::Password,
-                now_unix: 0,
-                ttl_seconds: 10,
-            },
-        )
-        .unwrap();
-        assert!(verify_session(&kr, 100, &token).is_err());
+        let token = sample_session(&kr, 0, 10);
+        assert!(matches!(
+            verify_session(&kr, 100, &token),
+            Err(TokenError::Expired)
+        ));
     }
 
     #[test]
     fn session_rejects_wrong_key() {
         let kr = keyring();
         let other = Keyring::from_key(libmacaroon::MacaroonKey::generate(b"other"));
-        let user = UserId::from("u_3");
-        let billing = BillingAccountId::from("ba_3");
-        let token = mint_session(
-            &kr,
-            MintSessionInput {
-                user_id: &user,
-                email: "x@y",
-                billing: &billing,
-                org: None,
-                role: Role::Owner,
-                auth_method: &AuthMethod::Password,
-                now_unix: 0,
-                ttl_seconds: 60,
-            },
-        )
-        .unwrap();
+        let token = sample_session(&kr, 0, 60);
         assert!(verify_session(&other, 1, &token).is_err());
     }
 
@@ -583,22 +497,119 @@ mod tests {
     #[test]
     fn cross_purpose_rejected() {
         let kr = keyring();
-        let user = UserId::from("u_x");
-        let session_token = mint_session(
+        let session_token = sample_session(&kr, 0, 60);
+        // Treat the session token as an invitation — must fail on purpose.
+        assert!(matches!(
+            verify_invitation(&kr, 1, &session_token),
+            Err(TokenError::WrongPurpose { .. })
+        ));
+    }
+
+    // --- Regression tests for the macaroon-attenuation vulnerability ---
+    //
+    // These reproduce the original exploit: a token holder appends first-party
+    // caveats (no key required) to escalate authority. The fix moves all
+    // authority claims into the signed identifier; only an `exp` caveat is
+    // satisfiable, so each of these appended-caveat attacks now FAILS.
+
+    fn attacker_append(token: &str, extra: &[&str]) -> String {
+        let mut mac = Macaroon::deserialize(token).unwrap();
+        for c in extra {
+            mac.add_first_party_caveat(*c).unwrap();
+        }
+        mac.serialize(Format::V2).unwrap()
+    }
+
+    #[test]
+    fn session_rejects_appended_authority_caveats() {
+        let kr = keyring();
+        let token = sample_session(&kr, 1_000, 3_600);
+        // The exact escalation that used to succeed.
+        let forged = attacker_append(&token, &["role=owner", "user=u_victim", "billing=ba_victim"]);
+        assert!(matches!(
+            verify_session(&kr, 1_001, &forged),
+            Err(TokenError::UnexpectedCaveat(_))
+        ));
+    }
+
+    #[test]
+    fn session_rejects_any_single_appended_caveat() {
+        let kr = keyring();
+        let token = sample_session(&kr, 1_000, 3_600);
+        let forged = attacker_append(&token, &["role=owner"]);
+        assert!(verify_session(&kr, 1_001, &forged).is_err());
+    }
+
+    #[test]
+    fn one_shot_rejects_appended_user_override() {
+        let kr = keyring();
+        let user = UserId::from("u_self");
+        // Attacker mints (legitimately) a reset for their own account...
+        let token = mint_password_reset(&kr, &user, "nonce-self", 0, 600).unwrap();
+        // ...then tries to retarget it at a victim by appending a caveat.
+        let forged = attacker_append(&token, &["user=u_victim"]);
+        assert!(matches!(
+            verify_password_reset(&kr, 1, &forged),
+            Err(TokenError::UnexpectedCaveat(_))
+        ));
+        // Sanity: the untampered token still verifies to the real subject.
+        let ok = verify_password_reset(&kr, 1, &token).unwrap();
+        assert_eq!(ok.user_id, user);
+    }
+
+    #[test]
+    fn invitation_rejects_appended_scope_and_role_override() {
+        let kr = keyring();
+        let invitation_id = InvitationId::from("inv_1");
+        let token = mint_invitation(
             &kr,
-            MintSessionInput {
-                user_id: &user,
-                email: "x@y",
-                billing: &BillingAccountId::from("ba_x"),
-                org: None,
+            MintInvitationInput {
+                invitation_id: &invitation_id,
+                email: "new@user.com",
+                scope_kind: ScopeKind::Org,
+                scope_id: "o_attacker",
                 role: Role::Member,
-                auth_method: &AuthMethod::Password,
+                required_idp: None,
+                nonce: "n1",
                 now_unix: 0,
-                ttl_seconds: 60,
+                ttl_seconds: 600,
             },
         )
         .unwrap();
-        // Treat the session token as an invitation — must fail.
-        assert!(verify_invitation(&kr, 1, &session_token).is_err());
+        let forged = attacker_append(&token, &["scope_id=o_victim", "role=owner"]);
+        assert!(verify_invitation(&kr, 1, &forged).is_err());
+    }
+
+    // --- `exp` is the one legitimately-attenuating caveat ---
+
+    #[test]
+    fn exp_caveat_cannot_be_extended() {
+        let kr = keyring();
+        // Token already expired (exp = 10).
+        let token = sample_session(&kr, 0, 10);
+        // Appending a far-future exp must NOT revive it — effective expiry is
+        // the earliest exp caveat, so the original exp=10 still governs.
+        let forged = attacker_append(&token, &["exp=9999999999"]);
+        assert!(matches!(
+            verify_session(&kr, 100, &forged),
+            Err(TokenError::Expired)
+        ));
+    }
+
+    #[test]
+    fn exp_caveat_can_be_attenuated_shorter() {
+        let kr = keyring();
+        // Long-lived token (exp = 10_000).
+        let token = sample_session(&kr, 0, 10_000);
+        // A holder narrows it to expire at 500 — a legitimate attenuation.
+        let narrowed = attacker_append(&token, &["exp=500"]);
+        // Still valid before the tighter expiry...
+        let s = verify_session(&kr, 100, &narrowed).unwrap();
+        assert_eq!(s.exp_unix, 500);
+        // ...and dead after it, even though the original exp is far away.
+        assert!(matches!(
+            verify_session(&kr, 600, &narrowed),
+            Err(TokenError::Expired)
+        ));
     }
 }

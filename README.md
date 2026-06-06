@@ -4,9 +4,10 @@ Multi-tenant SaaS auth on Cloudflare Workers. Sessions, invites, billing
 account membership, organizations, SSO, and password reset, all working.
 Same layout as
 [`example-connectrpc-worker`](https://github.com/connyay/example-connectrpc-worker).
-Authorization uses [`libmacaroon`](https://crates.io/crates/libmacaroon),
-so verification is a signature check plus caveat checks. The hot path
-never touches the DB.
+Authorization uses [`libmacaroon`](https://crates.io/crates/libmacaroon):
+each token's authority lives in a signed claims blob packed into the
+macaroon identifier, so verification is a single signature check. The hot
+path never touches the DB.
 
 ## At a glance
 
@@ -36,17 +37,36 @@ Four ConnectRPC services under `proto/workers/`:
 ## Macaroons
 
 Every auth artifact is a [`libmacaroon`](https://crates.io/crates/libmacaroon)
-macaroon signed by a single 32-byte root key. Tokens carry a
-`purpose=<session|invitation|password_reset|email_verify>` caveat, so a
-session can never be used as an invite (or vice versa); the verifier
-rejects on mismatched purpose.
+macaroon signed by a single 32-byte root key.
 
-| Token kind     | Caveats                                                                                                             | TTL    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------- | ------ |
-| Session        | `purpose=session`, `user`, `email`, `billing`, `role`, `auth_method`, `exp` (+ optional `org`)                      | 24h    |
-| Invitation     | `purpose=invitation`, `invitation_id`, `email`, `scope_kind`, `scope_id`, `role`, `nonce`, `exp` (+ `required_idp`) | 7d     |
-| Password reset | `purpose=password_reset`, `user`, `nonce`, `exp`                                                                    | 15 min |
-| Email verify   | `purpose=email_verify`, `user`, `nonce`, `exp`                                                                      | 24h    |
+All authority-bearing claims live in a protobuf
+[`TokenClaims`](proto/workers/auth/v1/token.proto) message packed into the
+macaroon **identifier**. The identifier is folded into the root signature
+(`sig0 = HMAC(root_key, identifier)`), so no holder can alter a claim
+without the key. Claims are deliberately **not** stored as caveats: anyone
+holding a macaroon can append first-party caveats *without* the key — that
+is the defining macaroon property — so caveats can only ever attenuate,
+never assert authority. (An earlier version of this demo stored identity in
+caveats and read it back, which let any token holder append `role=owner` /
+`user=<victim>` / `billing=<other>` and silently escalate. Don't do that.)
+
+The one value kept as a caveat is `exp=<unix>`, because expiry genuinely
+attenuates: a holder may append an *earlier* expiry and the effective
+expiry is the earliest one — it can never be extended. The verifier
+registers a single satisfier for well-formed `exp` caveats, so any *other*
+caveat is unsatisfied and verification fails. `purpose` is a signed claim,
+so a session can never be used as an invite (or vice versa); each verify
+path rejects a mismatched purpose.
+
+| Token kind     | Signed claims (in the identifier)                                                                            | TTL    |
+| -------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| Session        | `purpose=session`, `user`, `email`, `billing`, `role`, `auth_method` (+ optional `org`)                     | 24h    |
+| Invitation     | `purpose=invitation`, `invitation_id`, `email`, `scope_kind`, `scope_id`, `role`, `nonce` (+ `required_idp`) | 7d     |
+| Password reset | `purpose=password_reset`, `user`, `nonce`                                                                   | 15 min |
+| Email verify   | `purpose=email_verify`, `user`, `nonce`                                                                     | 24h    |
+
+Every token additionally carries exactly one `exp=<unix>` first-party
+caveat — the only caveat present on a well-formed token.
 
 One-shot tokens (invite, reset, verify) carry a `nonce` consumed in the
 `consumed_nonces` table on use. That's the only DB interaction tied to a
@@ -217,10 +237,11 @@ Left out of the demo on purpose. Extension points noted where relevant:
   `Mailer` trait and an `Auth.IssueEmailVerifyToken` RPC when wiring in
   real email.
 - Membership version pinning on session macaroons: sessions stay valid
-  until `exp` even if a member is removed. To tighten, add a `mver=<n>`
-  caveat with a per-(scope, user) version that the verifier cross-checks
-  (or an explicit `revoked_sessions` table). The demo accepts this
-  stale-token window.
+  until `exp` even if a member is removed. To tighten, add an `mver` claim
+  to `TokenClaims` with a per-(scope, user) version that the verifier
+  cross-checks (or an explicit `revoked_sessions` table). It belongs in the
+  signed identifier, not a caveat, since the server sets it and a holder
+  must not be able to forge it. The demo accepts this stale-token window.
 - Custom roles / RBAC: `owner` / `member` only.
 - Service-to-service / API tokens: sessions only.
 - Org to billing transfer: orgs are immutable to their parent.

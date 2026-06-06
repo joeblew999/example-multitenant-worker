@@ -4,9 +4,12 @@ package workers.auth.v1;
 
 // Authentication and session lifecycle.
 //
-// Every artifact in this service is backed by a libmacaroon token. Sessions
-// carry caveats (`user`, `billing`, `org`, `role`, `auth_method`, `exp`) and
-// verification is pure — no DB reads on the hot path.
+// Every artifact in this service is backed by a libmacaroon token. The
+// authority claims (`user`, `billing`, `org`, `role`, `auth_method`,
+// `purpose`) are packed into the signed token identifier (see TokenClaims),
+// never in caveats, so a holder cannot tamper with them. Expiry is the lone
+// `exp` first-party caveat (it can only attenuate). Verification is pure —
+// no DB reads on the hot path.
 service AuthService {
   // Create a new user + personal billing account, returning a session.
   // If `invite_token` is supplied, the invite is consumed atomically and a
