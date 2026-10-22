@@ -4,22 +4,21 @@
 //! gate on any membership. Personal billing accounts are non-deletable
 //! and don't accept `SetAutoJoinDomain`.
 
-use connectrpc::{ConnectError, RequestContext, Response, ServiceResult};
+use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 
 use crate::billing::BillingProvider;
 use crate::domain::{BillingAccount, BillingAccountId, ScopeKind, ScopeTarget, SsoConfig, UserId};
 use crate::middleware::require_session;
 use crate::proto::workers::billing::v1::{
-    BillingAccount as BillingAccountPb, BillingService, CancelSubscriptionResponse,
-    ConfigureSsoResponse, DeleteBillingAccountResponse, GetBillingAccountResponse,
-    GetSubscriptionResponse, InviteMemberResponse, Invoice as InvoicePb,
-    ListBillingAccountsResponse, ListInvoicesResponse, OwnedCancelSubscriptionRequestView,
-    OwnedConfigureSsoRequestView, OwnedDeleteBillingAccountRequestView,
-    OwnedGetBillingAccountRequestView, OwnedGetSubscriptionRequestView,
-    OwnedInviteMemberRequestView, OwnedListBillingAccountsRequestView,
-    OwnedListInvoicesRequestView, OwnedRemoveMemberRequestView, OwnedSetAutoJoinDomainRequestView,
-    OwnedSetPaymentMethodRequestView, OwnedUpdateMemberRoleRequestView, RemoveMemberResponse,
-    SetAutoJoinDomainResponse, SetPaymentMethodResponse, UpdateMemberRoleResponse,
+    BillingAccount as BillingAccountPb, BillingService, CancelSubscriptionRequest,
+    CancelSubscriptionResponse, ConfigureSsoRequest, ConfigureSsoResponse,
+    DeleteBillingAccountRequest, DeleteBillingAccountResponse, GetBillingAccountRequest,
+    GetBillingAccountResponse, GetSubscriptionRequest, GetSubscriptionResponse,
+    InviteMemberRequest, InviteMemberResponse, Invoice as InvoicePb, ListBillingAccountsRequest,
+    ListBillingAccountsResponse, ListInvoicesRequest, ListInvoicesResponse, RemoveMemberRequest,
+    RemoveMemberResponse, SetAutoJoinDomainRequest, SetAutoJoinDomainResponse,
+    SetPaymentMethodRequest, SetPaymentMethodResponse, UpdateMemberRoleRequest,
+    UpdateMemberRoleResponse,
 };
 use crate::services::authz::{require_billing_member, require_billing_owner};
 use crate::services::common::{InviteMemberParams, execute_invite_member, role_from_i32};
@@ -67,7 +66,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn get_billing_account(
         &self,
         ctx: RequestContext,
-        request: OwnedGetBillingAccountRequestView,
+        request: ServiceRequest<'_, GetBillingAccountRequest>,
     ) -> ServiceResult<GetBillingAccountResponse> {
         let session = require_session(&ctx)?;
         let id = BillingAccountId::from(request.id);
@@ -88,7 +87,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn list_billing_accounts(
         &self,
         ctx: RequestContext,
-        _request: OwnedListBillingAccountsRequestView,
+        _request: ServiceRequest<'_, ListBillingAccountsRequest>,
     ) -> ServiceResult<ListBillingAccountsResponse> {
         let session = require_session(&ctx)?;
         let memberships = self
@@ -118,7 +117,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn invite_member(
         &self,
         ctx: RequestContext,
-        request: OwnedInviteMemberRequestView,
+        request: ServiceRequest<'_, InviteMemberRequest>,
     ) -> ServiceResult<InviteMemberResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -159,7 +158,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn remove_member(
         &self,
         ctx: RequestContext,
-        request: OwnedRemoveMemberRequestView,
+        request: ServiceRequest<'_, RemoveMemberRequest>,
     ) -> ServiceResult<RemoveMemberResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -188,7 +187,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn update_member_role(
         &self,
         ctx: RequestContext,
-        request: OwnedUpdateMemberRoleRequestView,
+        request: ServiceRequest<'_, UpdateMemberRoleRequest>,
     ) -> ServiceResult<UpdateMemberRoleResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -205,7 +204,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn set_payment_method(
         &self,
         ctx: RequestContext,
-        request: OwnedSetPaymentMethodRequestView,
+        request: ServiceRequest<'_, SetPaymentMethodRequest>,
     ) -> ServiceResult<SetPaymentMethodResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -221,7 +220,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn get_subscription(
         &self,
         ctx: RequestContext,
-        request: OwnedGetSubscriptionRequestView,
+        request: ServiceRequest<'_, GetSubscriptionRequest>,
     ) -> ServiceResult<GetSubscriptionResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -241,7 +240,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn list_invoices(
         &self,
         ctx: RequestContext,
-        request: OwnedListInvoicesRequestView,
+        request: ServiceRequest<'_, ListInvoicesRequest>,
     ) -> ServiceResult<ListInvoicesResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -267,7 +266,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn cancel_subscription(
         &self,
         ctx: RequestContext,
-        request: OwnedCancelSubscriptionRequestView,
+        request: ServiceRequest<'_, CancelSubscriptionRequest>,
     ) -> ServiceResult<CancelSubscriptionResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -287,7 +286,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn configure_sso(
         &self,
         ctx: RequestContext,
-        request: OwnedConfigureSsoRequestView,
+        request: ServiceRequest<'_, ConfigureSsoRequest>,
     ) -> ServiceResult<ConfigureSsoResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -313,7 +312,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn set_auto_join_domain(
         &self,
         ctx: RequestContext,
-        request: OwnedSetAutoJoinDomainRequestView,
+        request: ServiceRequest<'_, SetAutoJoinDomainRequest>,
     ) -> ServiceResult<SetAutoJoinDomainResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -344,7 +343,7 @@ impl<R: Repo, B: BillingProvider> BillingService for BillingServer<R, B> {
     async fn delete_billing_account(
         &self,
         ctx: RequestContext,
-        request: OwnedDeleteBillingAccountRequestView,
+        request: ServiceRequest<'_, DeleteBillingAccountRequest>,
     ) -> ServiceResult<DeleteBillingAccountResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);

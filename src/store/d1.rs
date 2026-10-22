@@ -854,7 +854,7 @@ impl BillingRepo for D1Repo {
             "SELECT id, display_name, personal, owner_user_id, auto_join_domain, created_at_ms \
              FROM billing_accounts WHERE id IN ({placeholders})"
         );
-        let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(*s)).collect();
+        let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(s)).collect();
         let rows: Vec<BillingAccountRow> = self.query_all(&sql, &binds).await?;
         Ok(rows.into_iter().map(|r| (r.id.clone(), r.into())).collect())
     }
@@ -1011,7 +1011,7 @@ impl OrgRepo for D1Repo {
             "SELECT id, display_name, billing_account_id, personal, owner_user_id, created_at_ms \
              FROM organizations WHERE id IN ({placeholders})"
         );
-        let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(*s)).collect();
+        let binds: Vec<D1Type<'_>> = ids.iter().map(|s| D1Type::Text(s)).collect();
         let rows: Vec<OrgRow> = self.query_all(&sql, &binds).await?;
         Ok(rows.into_iter().map(|r| (r.id.clone(), r.into())).collect())
     }
@@ -1246,12 +1246,13 @@ impl MembershipRepo for D1Repo {
             .get_org_membership(user_id, org_id)
             .await?
             .ok_or_else(|| StoreError::not_found("org membership"))?;
-        if existing.role == Role::Owner && role != Role::Owner {
-            if self.count_org_owners(org_id).await? <= 1 {
-                return Err(StoreError::conflict(
-                    "cannot demote the last owner of an organization",
-                ));
-            }
+        if existing.role == Role::Owner
+            && role != Role::Owner
+            && self.count_org_owners(org_id).await? <= 1
+        {
+            return Err(StoreError::conflict(
+                "cannot demote the last owner of an organization",
+            ));
         }
         self.execute(
             "UPDATE org_memberships SET role = ? WHERE user_id = ? AND org_id = ?",
@@ -1269,12 +1270,10 @@ impl MembershipRepo for D1Repo {
             .get_org_membership(user_id, org_id)
             .await?
             .ok_or_else(|| StoreError::not_found("org membership"))?;
-        if existing.role == Role::Owner {
-            if self.count_org_owners(org_id).await? <= 1 {
-                return Err(StoreError::conflict(
-                    "cannot remove the last owner of an organization",
-                ));
-            }
+        if existing.role == Role::Owner && self.count_org_owners(org_id).await? <= 1 {
+            return Err(StoreError::conflict(
+                "cannot remove the last owner of an organization",
+            ));
         }
         self.execute(
             "DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?",
@@ -1372,7 +1371,7 @@ impl SsoConfigRepo for D1Repo {
         );
         let mut binds: Vec<D1Type<'_>> = Vec::with_capacity(scope_ids.len() + 1);
         binds.push(D1Type::Text(scope_kind.as_str()));
-        binds.extend(scope_ids.iter().map(|s| D1Type::Text(*s)));
+        binds.extend(scope_ids.iter().map(|s| D1Type::Text(s)));
         let rows: Vec<SsoConfigRow> = self.query_all(&sql, &binds).await?;
         rows.into_iter()
             .map(|r| {

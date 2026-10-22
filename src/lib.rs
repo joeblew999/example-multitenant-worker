@@ -31,8 +31,8 @@ pub mod time;
 use crate::auth::Keyring;
 use crate::billing::BillingProvider;
 use crate::middleware::{
-    AuthLayer, build_authorizer, metrics_interceptor, rate_limit_observe_layer,
-    shadow_interceptor, tracing_layer,
+    AuthLayer, build_authorizer, metrics_interceptor, rate_limit_observe_layer, shadow_interceptor,
+    tracing_layer,
 };
 use crate::proto::workers::auth::v1::AuthServiceExt;
 use crate::proto::workers::billing::v1::BillingServiceExt;
@@ -213,8 +213,10 @@ mod tests {
 
     use std::sync::Arc;
 
-    use buffa::view::OwnedView;
+    use buffa::view::{HasMessageView, MessageView};
+    use bytes::Bytes;
     use connectrpc::RequestContext as RpcContext;
+    use connectrpc::ServiceRequest;
     use futures::executor::block_on;
 
     use crate::auth::Keyring;
@@ -252,12 +254,14 @@ mod tests {
         ctx
     }
 
-    fn view<V>(msg: &V::Owned) -> OwnedView<V>
-    where
-        V: buffa::MessageView<'static>,
-        V::Owned: buffa::Message,
-    {
-        OwnedView::<V>::from_owned(msg).expect("build request view")
+    /// Wire-encode a request; `decode` then borrows a view from it, and
+    /// `ServiceRequest::from_parts(&view, &body)` is what a handler receives.
+    fn wire<M: buffa::Message>(msg: &M) -> Bytes {
+        Bytes::from(msg.encode_to_vec())
+    }
+
+    fn decode<'b, M: HasMessageView>(_: &M, body: &'b Bytes) -> M::View<'b> {
+        M::View::decode_view(body).expect("decode request view")
     }
 
     fn signup(server: &AuthServer<TestRepo, TestBilling>, email: &str, password: &str) -> String {
@@ -267,9 +271,14 @@ mod tests {
             invite_token: None,
             ..Default::default()
         };
-        let resp = block_on(server.signup(RpcContext::default(), view(&req)))
-            .unwrap()
-            .body;
+        let body = wire(&req);
+        let view = decode(&req, &body);
+        let resp = block_on(server.signup(
+            RpcContext::default(),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap()
+        .body;
         resp.session_token
     }
 
@@ -292,9 +301,14 @@ mod tests {
             password: "correct horse staple".into(),
             ..Default::default()
         };
-        let resp = block_on(server.login(RpcContext::default(), view(&req)))
-            .unwrap()
-            .body;
+        let body = wire(&req);
+        let view = decode(&req, &body);
+        let resp = block_on(server.login(
+            RpcContext::default(),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap()
+        .body;
         assert!(!resp.session_token.is_empty());
         let session = parse_session(&token, &state.keyring);
         assert_eq!(session.email, "ada@example.com");
@@ -312,7 +326,13 @@ mod tests {
             password: "wrong-password".into(),
             ..Default::default()
         };
-        let err = block_on(server.login(RpcContext::default(), view(&req))).unwrap_err();
+        let body = wire(&req);
+        let view = decode(&req, &body);
+        let err = block_on(server.login(
+            RpcContext::default(),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap_err();
         assert_eq!(err.code, connectrpc::ErrorCode::Unauthenticated);
     }
 
@@ -323,7 +343,10 @@ mod tests {
         let token = signup(&auth, "ada@example.com", "verylong-password");
         let session = parse_session(&token, &state.keyring);
         let ctx = ctx_with_session(session);
-        let resp = block_on(auth.whoami(ctx, view(&WhoamiRequest::default())))
+        let whoami_req = WhoamiRequest::default();
+        let body = wire(&whoami_req);
+        let view = decode(&whoami_req, &body);
+        let resp = block_on(auth.whoami(ctx, ServiceRequest::from_parts(&view, &body)))
             .unwrap()
             .body;
         let info = resp.whoami.into_option().unwrap();
@@ -362,9 +385,12 @@ mod tests {
             org_id: None,
             ..Default::default()
         };
-        let switched = block_on(
-            auth.switch_context(ctx_with_session(owner_session.clone()), view(&switch_req)),
-        )
+        let body = wire(&switch_req);
+        let view = decode(&switch_req, &body);
+        let switched = block_on(auth.switch_context(
+            ctx_with_session(owner_session.clone()),
+            ServiceRequest::from_parts(&view, &body),
+        ))
         .unwrap()
         .body;
         let owner_session_in_acme = parse_session(&switched.session_token, &state.keyring);
@@ -376,9 +402,11 @@ mod tests {
             role: crate::proto::workers::billing::v1::Role::ROLE_MEMBER.into(),
             ..Default::default()
         };
+        let body = wire(&invite_req);
+        let view = decode(&invite_req, &body);
         let invite_resp = block_on(billing_server.invite_member(
             ctx_with_session(owner_session_in_acme.clone()),
-            view(&invite_req),
+            ServiceRequest::from_parts(&view, &body),
         ))
         .unwrap()
         .body;
@@ -391,9 +419,14 @@ mod tests {
             invite_token: Some(invite_resp.invite_token_for_demo.clone()),
             ..Default::default()
         };
-        let signup_resp = block_on(auth.signup(RpcContext::default(), view(&signup_req)))
-            .unwrap()
-            .body;
+        let body = wire(&signup_req);
+        let view = decode(&signup_req, &body);
+        let signup_resp = block_on(auth.signup(
+            RpcContext::default(),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap()
+        .body;
         let newcomer_session = parse_session(&signup_resp.session_token, &state.keyring);
 
         // Membership should now exist.
@@ -429,10 +462,14 @@ mod tests {
             org_id: None,
             ..Default::default()
         };
-        let switched =
-            block_on(auth.switch_context(ctx_with_session(owner_session), view(&switch_req)))
-                .unwrap()
-                .body;
+        let body = wire(&switch_req);
+        let view = decode(&switch_req, &body);
+        let switched = block_on(auth.switch_context(
+            ctx_with_session(owner_session),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap()
+        .body;
         let owner_in_acme = parse_session(&switched.session_token, &state.keyring);
 
         let org_req = CreateOrganizationRequest {
@@ -440,9 +477,12 @@ mod tests {
             display_name: "Engineering".into(),
             ..Default::default()
         };
-        let org_resp = block_on(
-            org_server.create_organization(ctx_with_session(owner_in_acme), view(&org_req)),
-        )
+        let body = wire(&org_req);
+        let view = decode(&org_req, &body);
+        let org_resp = block_on(org_server.create_organization(
+            ctx_with_session(owner_in_acme),
+            ServiceRequest::from_parts(&view, &body),
+        ))
         .unwrap()
         .body;
         let org = org_resp.organization.into_option().unwrap();
@@ -461,8 +501,13 @@ mod tests {
             new_password: "another-very-long-pw".into(),
             ..Default::default()
         };
-        let err =
-            block_on(auth.change_password(ctx_with_session(session), view(&req))).unwrap_err();
+        let body = wire(&req);
+        let view = decode(&req, &body);
+        let err = block_on(auth.change_password(
+            ctx_with_session(session),
+            ServiceRequest::from_parts(&view, &body),
+        ))
+        .unwrap_err();
         assert_eq!(err.code, connectrpc::ErrorCode::Unauthenticated);
     }
 }
