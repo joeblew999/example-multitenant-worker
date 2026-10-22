@@ -52,12 +52,7 @@ impl MetricSink for AeMetricSink {
 /// Map the (name, value, labels) tuple to an AE data point and write.
 /// Errors logged but never propagated — a broken metric write must not
 /// fail the request.
-fn write_point(
-    ds: &AnalyticsEngineDataset,
-    name: &str,
-    value: f64,
-    labels: &[(&str, &str)],
-) {
+fn write_point(ds: &AnalyticsEngineDataset, name: &str, value: f64, labels: &[(&str, &str)]) {
     // worker-rs 0.8 exposes AnalyticsEngineDataPoint via a builder. Pull
     // procedure + status_class out by name so the blob order is stable
     // even if the label slice order changes.

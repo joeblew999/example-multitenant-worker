@@ -19,17 +19,21 @@
 use std::sync::Arc;
 
 use cedar_policy::{Context, EntityUid, RestrictedExpression};
-use connectrpc::UnaryRequest;
+use connectrpc::interceptor::UnaryRequest;
 use connectrpc_cedar::{CedarAuthorizer, CedarRequest, action::action_from_path};
 use connectrpc_cedar_interceptor::CedarInterceptor;
 
 use crate::auth::SessionContext;
 use crate::domain::Role;
 
-const SCHEMA: &str = include_str!("../../../../examples/multitenant-policies/multitenant.cedarschema");
-const BILLING_POLICIES: &str = include_str!("../../../../examples/multitenant-policies/policies/billing.cedar");
-const INVITATION_POLICIES: &str = include_str!("../../../../examples/multitenant-policies/policies/invitation.cedar");
-const ORG_POLICIES: &str = include_str!("../../../../examples/multitenant-policies/policies/org.cedar");
+const SCHEMA: &str =
+    include_str!("../../../../examples/multitenant-policies/multitenant.cedarschema");
+const BILLING_POLICIES: &str =
+    include_str!("../../../../examples/multitenant-policies/policies/billing.cedar");
+const INVITATION_POLICIES: &str =
+    include_str!("../../../../examples/multitenant-policies/policies/invitation.cedar");
+const ORG_POLICIES: &str =
+    include_str!("../../../../examples/multitenant-policies/policies/org.cedar");
 
 /// Build the editorial-policies authorizer. Called once at worker boot.
 /// Panics on schema/policy errors — those are deploy-time bugs, not
@@ -53,16 +57,17 @@ pub fn build_authorizer() -> Arc<CedarAuthorizer> {
 /// `services::authz::require_*` stays as the enforcing backstop.
 pub fn shadow_interceptor(
     authorizer: Arc<CedarAuthorizer>,
-) -> CedarInterceptor<
-    impl Fn(&UnaryRequest) -> Option<CedarRequest> + Clone + Send + Sync + 'static,
-> {
-    CedarInterceptor::shadow(authorizer, |req: &UnaryRequest| extract_cedar_request_ctx(req))
-        .skip_paths([
-            // Public routes that AuthLayer doesn't gate either.
-            "/healthz",
-            "/oauth/callback",
-            "/verify-email",
-        ])
+) -> CedarInterceptor<impl Fn(&UnaryRequest) -> Option<CedarRequest> + Clone + Send + Sync + 'static>
+{
+    CedarInterceptor::shadow(authorizer, |req: &UnaryRequest| {
+        extract_cedar_request_ctx(req)
+    })
+    .skip_paths([
+        // Public routes that AuthLayer doesn't gate either.
+        "/healthz",
+        "/oauth/callback",
+        "/verify-email",
+    ])
 }
 
 /// Interceptor-surface extractor: pull `SessionContext` + RPC path out of

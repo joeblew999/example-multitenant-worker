@@ -1,6 +1,6 @@
 //! `workers.invitation.v1.InvitationService` implementation.
 
-use connectrpc::{ConnectError, RequestContext, Response, ServiceResult};
+use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use uuid::Uuid;
 
 use crate::auth::verify_invitation;
@@ -10,13 +10,12 @@ use crate::domain::{
 };
 use crate::middleware::require_session;
 use crate::proto::workers::invitation::v1::{
-    AcceptInvitationResponse, DeclineInvitationResponse, GetInvitationResponse,
+    AcceptInvitationRequest, AcceptInvitationResponse, DeclineInvitationRequest,
+    DeclineInvitationResponse, GetInvitationRequest, GetInvitationResponse,
     Invitation as InvitationPb, InvitationService, InvitationStatus as InvitationStatusPb,
-    ListPendingInvitationsResponse, OwnedAcceptInvitationRequestView,
-    OwnedDeclineInvitationRequestView, OwnedGetInvitationRequestView,
-    OwnedListPendingInvitationsRequestView, OwnedResendInvitationRequestView,
-    OwnedRevokeInvitationRequestView, ResendInvitationResponse, RevokeInvitationResponse,
-    Role as RolePb, ScopeKind as ScopeKindPb,
+    ListPendingInvitationsRequest, ListPendingInvitationsResponse, ResendInvitationRequest,
+    ResendInvitationResponse, RevokeInvitationRequest, RevokeInvitationResponse, Role as RolePb,
+    ScopeKind as ScopeKindPb,
 };
 use crate::services::auth::build_invitation_token;
 use crate::services::authz::require_org_or_billing_owner;
@@ -103,7 +102,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn get_invitation(
         &self,
         _ctx: RequestContext,
-        request: OwnedGetInvitationRequestView,
+        request: ServiceRequest<'_, GetInvitationRequest>,
     ) -> ServiceResult<GetInvitationResponse> {
         let now_unix = self.state.clock.now_unix_seconds();
         let parsed = verify_invitation(&self.state.keyring, now_unix, request.token)
@@ -129,7 +128,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn accept_invitation(
         &self,
         ctx: RequestContext,
-        request: OwnedAcceptInvitationRequestView,
+        request: ServiceRequest<'_, AcceptInvitationRequest>,
     ) -> ServiceResult<AcceptInvitationResponse> {
         let session = require_session(&ctx)?;
         let now_ms = self.state.clock.now_ms();
@@ -183,7 +182,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn decline_invitation(
         &self,
         _ctx: RequestContext,
-        request: OwnedDeclineInvitationRequestView,
+        request: ServiceRequest<'_, DeclineInvitationRequest>,
     ) -> ServiceResult<DeclineInvitationResponse> {
         let now_ms = self.state.clock.now_ms();
         let now_unix = self.state.clock.now_unix_seconds();
@@ -208,7 +207,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn list_pending_invitations(
         &self,
         ctx: RequestContext,
-        _request: OwnedListPendingInvitationsRequestView,
+        _request: ServiceRequest<'_, ListPendingInvitationsRequest>,
     ) -> ServiceResult<ListPendingInvitationsResponse> {
         let session = require_session(&ctx)?;
         let user = fetch_user(&self.state, &session.user).await?;
@@ -256,7 +255,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn resend_invitation(
         &self,
         ctx: RequestContext,
-        request: OwnedResendInvitationRequestView,
+        request: ServiceRequest<'_, ResendInvitationRequest>,
     ) -> ServiceResult<ResendInvitationResponse> {
         let session = require_session(&ctx)?;
         let invitation_id = InvitationId::from(request.invitation_id);
@@ -302,7 +301,7 @@ impl<R: Repo, B: BillingProvider> InvitationService for InvitationServer<R, B> {
     async fn revoke_invitation(
         &self,
         ctx: RequestContext,
-        request: OwnedRevokeInvitationRequestView,
+        request: ServiceRequest<'_, RevokeInvitationRequest>,
     ) -> ServiceResult<RevokeInvitationResponse> {
         let session = require_session(&ctx)?;
         let invitation_id = InvitationId::from(request.invitation_id);

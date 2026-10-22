@@ -2,21 +2,21 @@
 name = "workers-multitenant"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.91"
 authors = ["Connor Hindley <conn.hindley@gmail.com>"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-worker = { version = "0.8", features = ["http", "d1"] }
-worker-macros = { version = "0.8", features = ["http"] }
+worker = { version = "0.8.7", features = ["http", "d1"] }
+worker-macros = { version = "0.8.7", features = ["http"] }
 
-connectrpc = { version = "0.6", default-features = false }
+connectrpc = { version = "0.9.1", default-features = false, features = ["json"] }
 
 # Protobuf runtime used by generated code.
-buffa = { version = "0.6", features = ["json"] }
-buffa-types = { version = "0.6", features = ["json"] }
+buffa = { version = "0.9.2", features = ["json"] }
+buffa-types = { version = "0.9.2", features = ["json"] }
 
 # Macaroons for every auth artifact (sessions + one-shot tokens).
 libmacaroon = { version = "0.2", features = ["wasm"], default-features = false }
@@ -80,7 +80,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
-connectrpc-build = { version = "0.6" }
+connectrpc-build = { version = "0.9.0" }
 
 [dev-dependencies]
 futures = "0.3"

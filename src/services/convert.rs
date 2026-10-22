@@ -15,7 +15,9 @@ pub fn role_to_pb(r: Role) -> buffa::EnumValue<RolePb> {
     }
 }
 
-pub fn auth_method_to_pb(m: &AuthMethod) -> buffa::MessageField<AuthMethodPb> {
+pub fn auth_method_to_pb<P: buffa::ProtoBox<AuthMethodPb>>(
+    m: &AuthMethod,
+) -> buffa::MessageField<AuthMethodPb, P> {
     let pb = match m {
         AuthMethod::Password => AuthMethodPb {
             kind: AuthMethodKindPb::AUTH_METHOD_KIND_PASSWORD.into(),
@@ -46,7 +48,9 @@ pub fn sso_kind_from_domain(s: &str) -> buffa::EnumValue<SsoKindPb> {
     }
 }
 
-pub fn ms_to_timestamp(ms: i64) -> buffa::MessageField<buffa_types::google::protobuf::Timestamp> {
+pub fn ms_to_timestamp<P: buffa::ProtoBox<buffa_types::google::protobuf::Timestamp>>(
+    ms: i64,
+) -> buffa::MessageField<buffa_types::google::protobuf::Timestamp, P> {
     let ts = buffa_types::google::protobuf::Timestamp::from_unix(
         ms / 1000,
         ((ms % 1000) * 1_000_000) as i32,

@@ -8,7 +8,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use connectrpc::{ConnectError, RequestContext, Response, ServiceResult};
+use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use uuid::Uuid;
 
 use crate::auth::{
@@ -22,12 +22,11 @@ use crate::domain::{
 };
 use crate::middleware::require_session;
 use crate::proto::workers::auth::v1::{
-    AuthService, ChangePasswordResponse, ConsumePasswordResetResponse, LinkIdentityResponse,
-    LoginResponse, OwnedChangePasswordRequestView, OwnedConsumePasswordResetRequestView,
-    OwnedLinkIdentityRequestView, OwnedLoginRequestView, OwnedRequestPasswordResetRequestView,
-    OwnedSignupRequestView, OwnedSsoCompleteRequestView, OwnedSsoStartRequestView,
-    OwnedSwitchContextRequestView, OwnedWhoamiRequestView, RequestPasswordResetResponse,
-    SignupResponse, SsoCompleteResponse, SsoStartResponse, SwitchContextResponse, WhoamiResponse,
+    AuthService, ChangePasswordRequest, ChangePasswordResponse, ConsumePasswordResetRequest,
+    ConsumePasswordResetResponse, LinkIdentityRequest, LinkIdentityResponse, LoginRequest,
+    LoginResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SignupRequest,
+    SignupResponse, SsoCompleteRequest, SsoCompleteResponse, SsoStartRequest, SsoStartResponse,
+    SwitchContextRequest, SwitchContextResponse, WhoamiRequest, WhoamiResponse,
 };
 use crate::services::authz::resolve_required_sso;
 use crate::services::common::{
@@ -56,7 +55,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn signup(
         &self,
         _ctx: RequestContext,
-        request: OwnedSignupRequestView,
+        request: ServiceRequest<'_, SignupRequest>,
     ) -> ServiceResult<SignupResponse> {
         validate_email(request.email)?;
         let now_ms = self.state.clock.now_ms();
@@ -117,7 +116,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn login(
         &self,
         _ctx: RequestContext,
-        request: OwnedLoginRequestView,
+        request: ServiceRequest<'_, LoginRequest>,
     ) -> ServiceResult<LoginResponse> {
         let user = self
             .state
@@ -198,7 +197,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn sso_start(
         &self,
         _ctx: RequestContext,
-        request: OwnedSsoStartRequestView,
+        request: ServiceRequest<'_, SsoStartRequest>,
     ) -> ServiceResult<SsoStartResponse> {
         let now_ms = self.state.clock.now_ms();
         let scope_hint = request.scope_hint;
@@ -249,7 +248,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn sso_complete(
         &self,
         _ctx: RequestContext,
-        request: OwnedSsoCompleteRequestView,
+        request: ServiceRequest<'_, SsoCompleteRequest>,
     ) -> ServiceResult<SsoCompleteResponse> {
         validate_email(request.email)?;
         let now_ms = self.state.clock.now_ms();
@@ -326,7 +325,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn link_identity(
         &self,
         ctx: RequestContext,
-        request: OwnedLinkIdentityRequestView,
+        request: ServiceRequest<'_, LinkIdentityRequest>,
     ) -> ServiceResult<LinkIdentityResponse> {
         let session = require_session(&ctx)?;
         let now_ms = self.state.clock.now_ms();
@@ -356,7 +355,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn change_password(
         &self,
         ctx: RequestContext,
-        request: OwnedChangePasswordRequestView,
+        request: ServiceRequest<'_, ChangePasswordRequest>,
     ) -> ServiceResult<ChangePasswordResponse> {
         let session = require_session(&ctx)?;
         let password_identity = fetch_password_identity(&self.state, &session.user, || {
@@ -383,7 +382,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn request_password_reset(
         &self,
         _ctx: RequestContext,
-        request: OwnedRequestPasswordResetRequestView,
+        request: ServiceRequest<'_, RequestPasswordResetRequest>,
     ) -> ServiceResult<RequestPasswordResetResponse> {
         let now_unix = self.state.clock.now_unix_seconds();
         let user = self.state.repo.get_user_by_email(request.email).await?;
@@ -411,7 +410,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn consume_password_reset(
         &self,
         _ctx: RequestContext,
-        request: OwnedConsumePasswordResetRequestView,
+        request: ServiceRequest<'_, ConsumePasswordResetRequest>,
     ) -> ServiceResult<ConsumePasswordResetResponse> {
         let now_ms = self.state.clock.now_ms();
         let now_unix = self.state.clock.now_unix_seconds();
@@ -451,7 +450,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn switch_context(
         &self,
         ctx: RequestContext,
-        request: OwnedSwitchContextRequestView,
+        request: ServiceRequest<'_, SwitchContextRequest>,
     ) -> ServiceResult<SwitchContextResponse> {
         let session = require_session(&ctx)?;
         let now_unix = self.state.clock.now_unix_seconds();
@@ -547,7 +546,7 @@ impl<R: Repo, B: BillingProvider> AuthService for AuthServer<R, B> {
     async fn whoami(
         &self,
         ctx: RequestContext,
-        _request: OwnedWhoamiRequestView,
+        _request: ServiceRequest<'_, WhoamiRequest>,
     ) -> ServiceResult<WhoamiResponse> {
         let session = require_session(&ctx)?;
         let org_lookup = async {

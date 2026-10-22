@@ -1,7 +1,7 @@
 //! `workers.org.v1.OrgService` implementation. Organizations are
 //! immutable to their parent billing account (no transfers).
 
-use connectrpc::{ConnectError, RequestContext, Response, ServiceResult};
+use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 
 use crate::auth::SessionContext;
 use crate::billing::BillingProvider;
@@ -10,13 +10,12 @@ use crate::domain::{
 };
 use crate::middleware::require_session;
 use crate::proto::workers::org::v1::{
-    ConfigureSsoResponse, CreateOrganizationResponse, DeleteOrganizationResponse,
-    GetOrganizationResponse, InviteMemberResponse, ListOrganizationsResponse, OrgService,
-    Organization as OrganizationPb, OwnedConfigureSsoRequestView,
-    OwnedCreateOrganizationRequestView, OwnedDeleteOrganizationRequestView,
-    OwnedGetOrganizationRequestView, OwnedInviteMemberRequestView,
-    OwnedListOrganizationsRequestView, OwnedRemoveMemberRequestView,
-    OwnedUpdateMemberRoleRequestView, RemoveMemberResponse, UpdateMemberRoleResponse,
+    ConfigureSsoRequest, ConfigureSsoResponse, CreateOrganizationRequest,
+    CreateOrganizationResponse, DeleteOrganizationRequest, DeleteOrganizationResponse,
+    GetOrganizationRequest, GetOrganizationResponse, InviteMemberRequest, InviteMemberResponse,
+    ListOrganizationsRequest, ListOrganizationsResponse, OrgService,
+    Organization as OrganizationPb, RemoveMemberRequest, RemoveMemberResponse,
+    UpdateMemberRoleRequest, UpdateMemberRoleResponse,
 };
 use crate::services::authz::{require_billing_owner, require_org_or_billing_owner};
 use crate::services::common::{InviteMemberParams, execute_invite_member, role_from_i32};
@@ -90,7 +89,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn create_organization(
         &self,
         ctx: RequestContext,
-        request: OwnedCreateOrganizationRequestView,
+        request: ServiceRequest<'_, CreateOrganizationRequest>,
     ) -> ServiceResult<CreateOrganizationResponse> {
         let session = require_session(&ctx)?;
         let billing_id = BillingAccountId::from(request.billing_account_id);
@@ -119,7 +118,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn get_organization(
         &self,
         ctx: RequestContext,
-        request: OwnedGetOrganizationRequestView,
+        request: ServiceRequest<'_, GetOrganizationRequest>,
     ) -> ServiceResult<GetOrganizationResponse> {
         let session = require_session(&ctx)?;
         let id = OrgId::from(request.id);
@@ -140,7 +139,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn list_organizations(
         &self,
         ctx: RequestContext,
-        request: OwnedListOrganizationsRequestView,
+        request: ServiceRequest<'_, ListOrganizationsRequest>,
     ) -> ServiceResult<ListOrganizationsResponse> {
         let session = require_session(&ctx)?;
         let orgs = match request.billing_account_id {
@@ -194,7 +193,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn invite_member(
         &self,
         ctx: RequestContext,
-        request: OwnedInviteMemberRequestView,
+        request: ServiceRequest<'_, InviteMemberRequest>,
     ) -> ServiceResult<InviteMemberResponse> {
         let session = require_session(&ctx)?;
         let org_id = OrgId::from(request.org_id);
@@ -241,7 +240,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn remove_member(
         &self,
         ctx: RequestContext,
-        request: OwnedRemoveMemberRequestView,
+        request: ServiceRequest<'_, RemoveMemberRequest>,
     ) -> ServiceResult<RemoveMemberResponse> {
         let session = require_session(&ctx)?;
         let org_id = OrgId::from(request.org_id);
@@ -263,7 +262,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn update_member_role(
         &self,
         ctx: RequestContext,
-        request: OwnedUpdateMemberRoleRequestView,
+        request: ServiceRequest<'_, UpdateMemberRoleRequest>,
     ) -> ServiceResult<UpdateMemberRoleResponse> {
         let session = require_session(&ctx)?;
         let org_id = OrgId::from(request.org_id);
@@ -286,7 +285,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn configure_sso(
         &self,
         ctx: RequestContext,
-        request: OwnedConfigureSsoRequestView,
+        request: ServiceRequest<'_, ConfigureSsoRequest>,
     ) -> ServiceResult<ConfigureSsoResponse> {
         let session = require_session(&ctx)?;
         let org_id = OrgId::from(request.org_id);
@@ -318,7 +317,7 @@ impl<R: Repo, B: BillingProvider> OrgService for OrgServer<R, B> {
     async fn delete_organization(
         &self,
         ctx: RequestContext,
-        request: OwnedDeleteOrganizationRequestView,
+        request: ServiceRequest<'_, DeleteOrganizationRequest>,
     ) -> ServiceResult<DeleteOrganizationResponse> {
         let session = require_session(&ctx)?;
         let org_id = OrgId::from(request.org_id);

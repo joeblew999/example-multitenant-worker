@@ -33,7 +33,6 @@ pub struct CfRateLimiter(pub Arc<worker::RateLimiter>);
 /// fast. Production should never hit this branch.
 const BINDING_TIMEOUT_MS: u64 = 500;
 
-
 #[async_trait]
 impl RateLimiter for CfRateLimiter {
     async fn check(&self, key: String) -> RateLimitOutcome {
@@ -50,9 +49,9 @@ impl RateLimiter for CfRateLimiter {
                 Either::Left((Ok(o), _)) if o.success => RateLimitOutcome::Allowed,
                 Either::Left((Ok(_), _)) => RateLimitOutcome::Exceeded,
                 Either::Left((Err(e), _)) => RateLimitOutcome::Error(e.to_string()),
-                Either::Right(_) => RateLimitOutcome::Error(format!(
-                    "binding timeout after {BINDING_TIMEOUT_MS}ms"
-                )),
+                Either::Right(_) => {
+                    RateLimitOutcome::Error(format!("binding timeout after {BINDING_TIMEOUT_MS}ms"))
+                }
             }
         })
         .await
@@ -69,13 +68,12 @@ impl RateLimiter for CfRateLimiter {
 pub fn observe_layer<B: 'static>(
     binding: worker::RateLimiter,
 ) -> RateLimitLayer<CfRateLimiter, impl RateLimitKeyExtractor<B> + Clone> {
-    RateLimitLayer::observe(CfRateLimiter(Arc::new(binding)), IpKeyExtractor::new())
-        .skip_paths([
-            // Public endpoints that AuthLayer also doesn't gate.
-            // No rate-limit on health checks (uptime probes hammer them).
-            "/healthz",
-            // OAuth bounce — already short and bursty by design.
-            "/oauth/callback",
-            "/verify-email",
-        ])
+    RateLimitLayer::observe(CfRateLimiter(Arc::new(binding)), IpKeyExtractor::new()).skip_paths([
+        // Public endpoints that AuthLayer also doesn't gate.
+        // No rate-limit on health checks (uptime probes hammer them).
+        "/healthz",
+        // OAuth bounce — already short and bursty by design.
+        "/oauth/callback",
+        "/verify-email",
+    ])
 }
